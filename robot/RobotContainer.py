@@ -8,6 +8,7 @@ from robot.util.Logger import Logger
 
 import json
 
+
 class RobotContainer:
     """
     The RobotContainer class is responsible for defining the robot's subsystems,
@@ -25,12 +26,17 @@ class RobotContainer:
         self.serial_port = config["serial_port"]
         self.baud_rate = config["baud_rate"]
         self.max_speed = config["max_speed"]
-        
-        self.serialHelper = SerialHelper(serial_port=self.serial_port, baud_rate=self.baud_rate)
+
+        self.serialHelper = SerialHelper(
+            serial_port=self.serial_port, baud_rate=self.baud_rate
+        )
 
         # Initialize subsystems
         self.drivetrain = Drivetrain(
-            joystick=self.joystick, max_speed=self.max_speed, drive_mode="tank", serialHelper=self.serialHelper
+            joystick=self.joystick,
+            max_speed=self.max_speed,
+            drive_mode="tank",
+            serialHelper=self.serialHelper,
         )
         self.vision = Vision(serialHelper=self.serialHelper)
 
@@ -42,8 +48,11 @@ class RobotContainer:
 
         Logger.info("RobotContainer initialized.")
 
-    def load_config():
-        with open("config.json", "r") as f:
+    def load_config(self):
+        import os
+
+        config_path = os.path.join(os.path.dirname(__file__), "config.json")
+        with open(config_path, "r") as f:
             return json.load(f)
 
     def _initialize_joystick(self):
@@ -78,20 +87,30 @@ class RobotContainer:
 
         # Handle joystick button presses
         if self.joystick:
-            current_button_states = [self.joystick.get_button(i) for i in range(self.joystick.get_numbuttons())]
+            current_button_states = [
+                self.joystick.get_button(i)
+                for i in range(self.joystick.get_numbuttons())
+            ]
 
             # Check for X button (button 0) press
             if current_button_states[0] and not self.previous_button_states[0]:
                 # X button was just pressed
                 self.drivetrain.set_command(
-                    TurnDrive(serialHelper=self.serialHelper, vision=self.vision, max_speed=50)
+                    TurnDrive(
+                        serialHelper=self.serialHelper, vision=self.vision, max_speed=50
+                    )
                 )
 
             # Check for O button (button 1) press
             elif current_button_states[1] and not self.previous_button_states[1]:
                 # O button was just pressed
                 self.drivetrain.set_command(
-                    Teleop(joystick=self.joystick, max_speed=self.max_speed, drive_mode="tank", serialHelper=self.serialHelper)
+                    Teleop(
+                        joystick=self.joystick,
+                        max_speed=self.max_speed,
+                        drive_mode="tank",
+                        serialHelper=self.serialHelper,
+                    )
                 )
 
             # Update previous button states
