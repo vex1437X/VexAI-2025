@@ -1,12 +1,11 @@
 import pygame
+
 from robot.subsystems.Drivetrain import Drivetrain
 from robot.util.SerialHelper import SerialHelper
 from robot.subsystems.Vision import Vision
 from robot.commands.TeleopCommand import Teleop
 from robot.commands.TurnDrive import TurnDrive
-from robot.util.Logger import Logger
-
-import json
+import logging
 
 
 class RobotContainer:
@@ -16,44 +15,57 @@ class RobotContainer:
     """
 
     def __init__(self):
+        # logging.basicConfig(level=logging.INFO)
+        # self.logger = logging.getLogger(__name__)
+
+        # self.logger.info("Initializing RobotContainer...")
+
+        # Initialize pygame
+        # self.logger.info("Initializing pygame...")
         pygame.init()
         pygame.joystick.init()
 
+        # Initialize joystick
+        print("Initializing joystick...")
         self.joystick = self._initialize_joystick()
 
-        # Load configuration from JSON file
-        config = self.load_config()
-        self.serial_port = config["serial_port"]
-        self.baud_rate = config["baud_rate"]
-        self.max_speed = config["max_speed"]
+        # Hardcoded configuration values
+        # self.logger.info("Setting configuration values...")
+        self.serial_port = "/dev/tty.usbmodem143303"
+        self.baud_rate = 9600
+        self.max_speed = 50
 
+        # Initialize SerialHelper
+        # self.logger.info(
+        #     f"Initializing SerialHelper with port {self.serial_port} and baud rate {self.baud_rate}..."
+        # )
         self.serialHelper = SerialHelper(
             serial_port=self.serial_port, baud_rate=self.baud_rate
         )
 
         # Initialize subsystems
+        # self.logger.info("Initializing Drivetrain subsystem...")
         self.drivetrain = Drivetrain(
             joystick=self.joystick,
             max_speed=self.max_speed,
             drive_mode="tank",
             serialHelper=self.serialHelper,
         )
+        print("Drivetrain initialized.")
+
+        # self.logger.info("Initializing Vision subsystem...")
         self.vision = Vision(serialHelper=self.serialHelper)
+        # self.logger.info("Vision subsystem initialized.")
 
         # Track button states
+        # self.logger.info("Initializing button states...")
         self.previous_button_states = [False] * self.joystick.get_numbuttons()
 
         # Configure button bindings
+        # self.logger.info("Configuring button bindings...")
         self.configure_button_bindings()
 
-        Logger.info("RobotContainer initialized.")
-
-    def load_config(self):
-        import os
-
-        config_path = os.path.join(os.path.dirname(__file__), "config.json")
-        with open(config_path, "r") as f:
-            return json.load(f)
+        # self.logger.info("RobotContainer initialization complete.")
 
     def _initialize_joystick(self):
         """Initialize the joystick, if available."""
@@ -61,9 +73,9 @@ class RobotContainer:
         if joystick_count > 0:
             joystick = pygame.joystick.Joystick(0)
             joystick.init()
-            Logger.info("Joystick initialized.")
+            print(f"Joystick initialized: {joystick.get_name()}")
             return joystick
-        Logger.error("No joystick found.")
+        print("No joystick found.")
         return None
 
     def configure_button_bindings(self):
@@ -79,14 +91,15 @@ class RobotContainer:
         return None
 
     def periodic(self):
-        """
-        Periodically update the robot's subsystems.
-        """
+        # self.logger.info("Periodic loop started.")
         self.drivetrain.tick()
+        # self.logger.info("Drivetrain tick completed.")
         self.vision.tick()
+        # self.logger.info("Vision tick completed.")
 
         # Handle joystick button presses
         if self.joystick:
+            # self.logger.info("Processing joystick input.")
             current_button_states = [
                 self.joystick.get_button(i)
                 for i in range(self.joystick.get_numbuttons())
@@ -94,7 +107,7 @@ class RobotContainer:
 
             # Check for X button (button 0) press
             if current_button_states[0] and not self.previous_button_states[0]:
-                # X button was just pressed
+                # self.logger.info("X button pressed.")
                 self.drivetrain.set_command(
                     TurnDrive(
                         serialHelper=self.serialHelper, vision=self.vision, max_speed=50
@@ -103,7 +116,7 @@ class RobotContainer:
 
             # Check for O button (button 1) press
             elif current_button_states[1] and not self.previous_button_states[1]:
-                # O button was just pressed
+                # self.logger.info("O button pressed.")
                 self.drivetrain.set_command(
                     Teleop(
                         joystick=self.joystick,
@@ -117,3 +130,4 @@ class RobotContainer:
             self.previous_button_states = current_button_states
 
         pygame.time.delay(20)
+        # self.logger.info("Periodic loop ended.")

@@ -2,9 +2,7 @@ import pyrealsense2 as rs
 import numpy as np
 import cv2
 import sys
-import threading
 from robot.util.Subsystem import Subsystem
-from robot.util.Logger import Logger
 
 
 class Vision(Subsystem):
@@ -19,12 +17,10 @@ class Vision(Subsystem):
         self.align = rs.align(rs.stream.color)
 
         self._configure_pipeline()
-        Logger.info("Vision subsystem initialized.")
 
         self.latest_offsets = None
-        self.running = True
-        self.thread = threading.Thread(target=self._process_frames, daemon=True)
-        self.thread.start()
+
+        print("RealSense camera initialized successfully.")
 
     def _configure_pipeline(self):
         """Configure the RealSense pipeline."""
@@ -32,14 +28,8 @@ class Vision(Subsystem):
         self.config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
         try:
             self.pipeline.start(self.config)
-            Logger.info("RealSense pipeline started.")
         except RuntimeError as e:
-            Logger.error(f"Could not start RealSense pipeline: {e}")
             sys.exit(1)
-
-    def _process_frames(self):
-        while self.running:
-            self.latest_offsets = self.process_frame(lambda frame: None)
 
     def process_frame(self, mask_generator):
         """
@@ -78,12 +68,19 @@ class Vision(Subsystem):
 
         return x_off, z_off
 
-    def get_latest_offsets(self):
+    def get_latest_offsets(self, mask_generator):
+        """
+        Get the latest offsets by processing a frame.
+
+        Args:
+            mask_generator (callable): A function that generates a binary mask for object detection.
+
+        Returns:
+            tuple: (x_offset, z_offset) or (None, None) if no object is detected.
+        """
+        self.latest_offsets = self.process_frame(mask_generator)
         return self.latest_offsets
 
     def stop(self):
         """Stop the RealSense pipeline."""
-        self.running = False
-        self.thread.join()
         self.pipeline.stop()
-        Logger.info("RealSense pipeline stopped.")

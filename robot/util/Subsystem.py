@@ -1,5 +1,3 @@
-from robot.util.CommandScheduler import CommandScheduler
-
 class Subsystem:
     """
     Base class for all robot subsystems.
@@ -7,13 +5,16 @@ class Subsystem:
 
     def __init__(self, serialHelper=None):
         self.serialHelper = serialHelper
-        self.command_scheduler = CommandScheduler()
+        self.command = None
 
     def tick(self):
         """
         Periodically execute the scheduled commands.
         """
-        self.command_scheduler.run()
+        if self.command:
+            self.command.execute()
+            if self.command.is_finished():
+                self.command.end(False)
 
     def set_command(self, command):
         """
@@ -22,5 +23,9 @@ class Subsystem:
         Args:
             command (Command): The command to execute.
         """
-        self.command_scheduler.schedule(command)
-
+        if self.command and not self.command.is_finished():
+            self.command.end(True)
+        elif self.command:
+            self.command.end(False)
+        command.start()
+        self.command = command

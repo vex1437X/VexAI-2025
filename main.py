@@ -1,4 +1,5 @@
 from robot.RobotContainer import RobotContainer
+import time
 
 
 def main() -> None:
@@ -9,3 +10,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    time.sleep(0.02)

@@ -2,13 +2,16 @@ import serial
 import struct
 from robot.util.Constants import *
 
+
 class SerialHelper:
     # Special byte values for packet framing and escaping
     START = 0xAA
     END = 0xAB
     ESCAPE = 0xAC
 
-    def __init__(self, serial_port='/dev/tty.usbmodem142303', baud_rate=9600, timeout=0.01):
+    def __init__(
+        self, serial_port="/dev/tty.usbmodem142303", baud_rate=9600, timeout=0.01
+    ):
         # Initialize serial communication parameters
         self.serial_port = serial_port
         self.baud_rate = baud_rate
@@ -18,6 +21,7 @@ class SerialHelper:
 
     def send_command(self, command: bytes):
         # Send a command over the serial connection
+        print(f"Sending command: {command}")
         try:
             self.ser.write(command)
             self.ser.flush()
@@ -30,7 +34,7 @@ class SerialHelper:
         # Convert a list of doubles into a byte array
         raw = bytearray()
         for val in doubles:
-            packed = struct.pack('>d', val)  # Pack each double in big-endian format
+            packed = struct.pack(">d", val)  # Pack each double in big-endian format
             raw.extend(packed)
         return raw
 
@@ -74,7 +78,11 @@ class SerialHelper:
             # Read the data tag
             tag_val = packet_bytes[idx]
             idx += 1
-            tag = self.DataTag(tag_val) if tag_val in (t.value for t in self.DataTag) else None
+            tag = (
+                self.DataTag(tag_val)
+                if tag_val in (t.value for t in self.DataTag)
+                else None
+            )
             if tag is None:
                 break
 
@@ -83,9 +91,11 @@ class SerialHelper:
                 break
 
             # Read the double value
-            double_bytes = packet_bytes[idx:idx+8]
+            double_bytes = packet_bytes[idx : idx + 8]
             idx += 8
-            value = struct.unpack('>d', double_bytes)[0]  # Unpack the double in big-endian format
+            value = struct.unpack(">d", double_bytes)[
+                0
+            ]  # Unpack the double in big-endian format
             data[tag] = value
 
         return data

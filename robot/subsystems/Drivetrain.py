@@ -1,6 +1,5 @@
 from robot.util.Subsystem import Subsystem
 from robot.commands.TeleopCommand import Teleop
-from robot.util.Logger import Logger
 
 
 class Drivetrain(Subsystem):
@@ -14,5 +13,7 @@ class Drivetrain(Subsystem):
         self.command = (
             Teleop(joystick, max_speed, drive_mode, serialHelper) if joystick else None
         )
-
-        Logger.info("Drivetrain initialized.")
+        if self.command:
+            print("Command initialized.")
+        else:
+            print("Command not initialized.")
