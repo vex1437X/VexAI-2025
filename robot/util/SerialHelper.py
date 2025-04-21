@@ -21,7 +21,7 @@ class SerialHelper:
 
     def send_command(self, command: bytes):
         # Send a command over the serial connection
-        print(f"Sending command: {command}")
+        # print(f"Sending command: {command}")
         try:
             self.ser.write(command)
             self.ser.flush()

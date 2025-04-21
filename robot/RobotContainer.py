@@ -99,35 +99,27 @@ class RobotContainer:
 
         # Handle joystick button presses
         if self.joystick:
-            # self.logger.info("Processing joystick input.")
-            current_button_states = [
-                self.joystick.get_button(i)
-                for i in range(self.joystick.get_numbuttons())
-            ]
-
-            # Check for X button (button 0) press
-            if current_button_states[0] and not self.previous_button_states[0]:
-                # self.logger.info("X button pressed.")
-                self.drivetrain.set_command(
-                    TurnDrive(
-                        serialHelper=self.serialHelper, vision=self.vision, max_speed=50
-                    )
+            # if new Square button press, start TurnDrive command
+            if self.joystick.get_button(2) and not self.previous_button_states[2]:
+                print("Square button pressed.")
+                turn_drive_command = TurnDrive(
+                    max_speed=self.max_speed,
+                    serialHelper=self.serialHelper,
+                    vision=self.vision,
                 )
-
-            # Check for O button (button 1) press
-            elif current_button_states[1] and not self.previous_button_states[1]:
-                # self.logger.info("O button pressed.")
-                self.drivetrain.set_command(
-                    Teleop(
-                        joystick=self.joystick,
-                        max_speed=self.max_speed,
-                        drive_mode="tank",
-                        serialHelper=self.serialHelper,
-                    )
+                print("TurnDrive command initialized.")
+                self.drivetrain.set_command(turn_drive_command)
+                print("TurnDrive command set.")
+            # if new Triangle button press, start Teleop command
+            elif self.joystick.get_button(3) and not self.previous_button_states[3]:
+                print("Triangle button pressed.")
+                teleop_command = Teleop(
+                    joystick=self.joystick,
+                    max_speed=self.max_speed,
+                    drive_mode="tank",
+                    serialHelper=self.serialHelper,
                 )
-
-            # Update previous button states
-            self.previous_button_states = current_button_states
+                self.drivetrain.set_command(teleop_command)
 
         pygame.time.delay(20)
         # self.logger.info("Periodic loop ended.")

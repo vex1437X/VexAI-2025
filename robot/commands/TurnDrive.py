@@ -32,45 +32,60 @@ class TurnDrive(Command):
         # Flags to track completion of turning and driving
         self.turn_finished = False
         self.drive_finished = False
+        print("TurnDrive initialized.")
 
     def execute(self):
         """
         Execute the TurnDrive command. This method is called periodically.
         """
-        offsets = self.vision.process_frame(lambda frame: None)
+        print("Executing TurnDrive command...")
+        offsets = self.vision.process_frame()
         if offsets is None or len(offsets) < 2:
+            print("No valid offsets detected. Stopping motors.")
             self._stop_motors()
             self.turn_finished = True
             self.drive_finished = True
             return
 
         x_offset, z_offset = offsets
+        print(f"Offsets detected: x_offset={x_offset}, z_offset={z_offset}")
         self._handle_turning(x_offset, z_offset)
         self._handle_driving(z_offset)
 
         if self.turn_finished and self.drive_finished:
+            print("Turn and drive completed. Stopping motors.")
             self._stop_motors()
             self.end(False)
 
     def _handle_turning(self, x_offset, z_offset):
         if self.turn_finished:
+            print("Turning already finished.")
             return
 
         delta_angle = math.degrees(math.atan2(x_offset, z_offset))
+        print(f"Delta angle for turning: {delta_angle}")
 
         if abs(delta_angle) < 1:
+            print("Delta angle within threshold. Turning finished.")
             self.turn_finished = True
         else:
             turn_speed = self.turn_pid(delta_angle)
+            print(f"Calculated turn speed: {turn_speed}")
             self._set_motor_speeds(-turn_speed, turn_speed)
 
     def _handle_driving(self, z_offset):
-        if self.drive_finished or not self.turn_finished:
+        if self.drive_finished:
+            print("Driving already finished.")
+            return
+        if not self.turn_finished:
+            print("Turning not finished. Skipping driving.")
             return
 
         drive_speed = self.drive_pid(z_offset)
+        print(f"Calculated drive speed: {drive_speed}")
 
         if abs(z_offset) < 0.01:
+            print("Z offset within threshold. Driving finished.")
             self.drive_finished = True
         else:
             self._set_motor_speeds(-drive_speed, -drive_speed)
