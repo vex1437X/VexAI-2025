@@ -13,7 +13,7 @@ class Drivetrain(Subsystem):
         self.command = (
             Teleop(joystick, max_speed, drive_mode, serialHelper) if joystick else None
         )
-        if self.command:
-            print("Command initialized.")
-        else:
-            print("Command not initialized.")
+        # if self.command:
+        #     print("Command initialized.")
+        # else:
+        #     print("Command not initialized.")

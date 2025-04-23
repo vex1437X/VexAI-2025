@@ -5,7 +5,6 @@ from robot.util.SerialHelper import SerialHelper
 from robot.subsystems.Vision import Vision
 from robot.commands.TeleopCommand import Teleop
 from robot.commands.TurnDrive import TurnDrive
-import logging
 
 
 class RobotContainer:
@@ -43,6 +42,10 @@ class RobotContainer:
             serial_port=self.serial_port, baud_rate=self.baud_rate
         )
 
+        # self.logger.info("Initializing Vision subsystem...")
+        self.vision = Vision(serialHelper=self.serialHelper)
+        # self.logger.info("Vision subsystem initialized.")
+
         # Initialize subsystems
         # self.logger.info("Initializing Drivetrain subsystem...")
         self.drivetrain = Drivetrain(
@@ -52,10 +55,6 @@ class RobotContainer:
             serialHelper=self.serialHelper,
         )
         print("Drivetrain initialized.")
-
-        # self.logger.info("Initializing Vision subsystem...")
-        self.vision = Vision(serialHelper=self.serialHelper)
-        # self.logger.info("Vision subsystem initialized.")
 
         # Track button states
         # self.logger.info("Initializing button states...")
@@ -91,35 +90,46 @@ class RobotContainer:
         return None
 
     def periodic(self):
-        # self.logger.info("Periodic loop started.")
-        self.drivetrain.tick()
-        # self.logger.info("Drivetrain tick completed.")
-        self.vision.tick()
-        # self.logger.info("Vision tick completed.")
-
-        # Handle joystick button presses
-        if self.joystick:
-            # if new Square button press, start TurnDrive command
-            if self.joystick.get_button(2) and not self.previous_button_states[2]:
-                print("Square button pressed.")
-                turn_drive_command = TurnDrive(
-                    max_speed=self.max_speed,
-                    serialHelper=self.serialHelper,
-                    vision=self.vision,
-                )
-                print("TurnDrive command initialized.")
-                self.drivetrain.set_command(turn_drive_command)
-                print("TurnDrive command set.")
-            # if new Triangle button press, start Teleop command
-            elif self.joystick.get_button(3) and not self.previous_button_states[3]:
-                print("Triangle button pressed.")
-                teleop_command = Teleop(
-                    joystick=self.joystick,
-                    max_speed=self.max_speed,
-                    drive_mode="tank",
-                    serialHelper=self.serialHelper,
-                )
-                self.drivetrain.set_command(teleop_command)
-
         pygame.time.delay(20)
-        # self.logger.info("Periodic loop ended.")
+        # ── PROCESS PYGAME EVENTS ──
+        pygame.event.pump()
+
+        self.drivetrain.tick()
+        self.vision.tick()
+
+        if not self.joystick:
+            return
+
+        # make sure your previous_button_states is the right length
+        num_buttons = self.joystick.get_numbuttons()
+        if len(self.previous_button_states) != num_buttons:
+            self.previous_button_states = [False] * num_buttons
+
+        # check every button for a “rising edge”
+        for i in range(num_buttons):
+            current = self.joystick.get_button(i)
+            if current and not self.previous_button_states[i]:
+                # button i was just pressed
+                if i == 2:  # Square
+                    print("Square button pressed.")
+                    cmd = TurnDrive(
+                        max_speed=self.max_speed,
+                        serialHelper=self.serialHelper,
+                        vision=self.vision,
+                    )
+                    print("  → initializing TurnDrive")
+                    self.drivetrain.set_command(cmd)
+                    print("  → TurnDrive set.")
+                elif i == 3:  # Triangle
+                    print("Triangle button pressed.")
+                    cmd = Teleop(
+                        joystick=self.joystick,
+                        max_speed=self.max_speed,
+                        drive_mode="tank",
+                        serialHelper=self.serialHelper,
+                    )
+                    print("  → initializing Teleop")
+                    self.drivetrain.set_command(cmd)
+
+            # update for next frame
+            self.previous_button_states[i] = current

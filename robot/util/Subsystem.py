@@ -24,11 +24,11 @@ class Subsystem:
             command (Command): The command to execute.
         """
         if self.command and not self.command.is_finished():
-            print(f"Command {self.command} is not finished. Ending it.")
+            # print(f"Command {self.command} is not finished. Ending it.")
             self.command.end(True)
         elif self.command:
-            print(f"Command {self.command} is finished. Ending it.")
+            # print(f"Command {self.command} is finished. Ending it.")
             self.command.end(False)
-        print(f"Setting new command: {command}")
+        # print(f"Setting new command: {command}")
         command.start()
         self.command = command

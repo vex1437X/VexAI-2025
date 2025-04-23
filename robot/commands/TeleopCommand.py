@@ -33,7 +33,7 @@ class Teleop(Command):
                 [left_speed, right_speed, left_speed, right_speed],
             )
             self.serialHelper.send_command(command)
-        # print(f"Driving go brrr {left_y} + f{right_y}")
+        print(f"Driving go brrr {left_y} + f{right_y}")
 
     def start(self):
         pass
