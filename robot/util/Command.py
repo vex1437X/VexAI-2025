@@ -1,4 +1,7 @@
 class Command:
+    def __init__(self, linkedCommand=None):
+        self.linkedCommand = None
+
     def initialize(self) -> None:
         pass
 

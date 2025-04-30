@@ -103,10 +103,11 @@ class Vision(Subsystem):
             print(f"⚠️  Could not start RealSense pipeline: {e}")
             raise
 
-    def process_frame(self):
+    def process_frame(self, min_blob_size=1500):
         """
         Process a frame and return a dict of tracked rings:
            { track_id: (x_offset, z_offset), … }
+        :param min_blob_size: Minimum size of blobs to consider as valid rings.
         """
         try:
             frames = self.pipeline.wait_for_frames()
@@ -119,6 +120,11 @@ class Vision(Subsystem):
             color_image = np.asanyarray(color_frame.get_data())
             mask = self._generate_mask(color_image)
 
+            # Display the color image and mask
+            cv2.imshow("Color Image", color_image)
+            cv2.imshow("Red Ring Mask", mask)
+            cv2.waitKey(1)  # Add a small delay to allow the GUI to update
+
             # find all ring‐candidate centroids
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
                 mask
@@ -126,7 +132,7 @@ class Vision(Subsystem):
             input_cs = []
             for i in range(1, num_labels):
                 area = stats[i, cv2.CC_STAT_AREA]
-                if area < 500:  # ignore small noise
+                if area < min_blob_size:  # ignore small noise
                     continue
                 (cx, cy) = centroids[i]
                 input_cs.append((int(cx), int(cy)))
@@ -144,12 +150,6 @@ class Vision(Subsystem):
                 x, _, z = rs.rs2_deproject_pixel_to_point(intr, [cx, cy], depth)
                 results[oid] = (x, z)
 
-            # print number of rings detected
-            # num_rings = len(results)
-            # if num_rings > 0:
-            #     print(f"Detected {num_rings} ring(s): {results}")
-            # else:
-            #     print("No rings detected.")
             return results
 
         except Exception as e:
@@ -157,23 +157,12 @@ class Vision(Subsystem):
             return {}
 
     def _generate_mask(self, color_image):
-        # Lab a* for red
-        lab = cv2.cvtColor(color_image, cv2.COLOR_BGR2Lab)
-        a_chan = lab[:, :, 1]
-        _, red_mask = cv2.threshold(a_chan, 150, 255, cv2.THRESH_BINARY)
-
-        # HSV saturation to reject whites
         hsv = cv2.cvtColor(color_image, cv2.COLOR_BGR2HSV)
-        s_chan = hsv[:, :, 1]
-        _, sat_mask = cv2.threshold(s_chan, 50, 255, cv2.THRESH_BINARY)
-
-        # combine + clean up
-        mask = cv2.bitwise_and(red_mask, sat_mask)
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
-        return mask
+        mask1 = cv2.inRange(hsv, (0, 100, 90), (10, 255, 255))
+        mask2 = cv2.inRange(hsv, (170, 100, 90), (179, 255, 255))
+        return cv2.bitwise_or(mask1, mask2)
 
     def stop(self):
         self.pipeline.stop()
+        cv2.destroyAllWindows()  # Close all OpenCV windows
         print("RealSense pipeline stopped.")

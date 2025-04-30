@@ -5,6 +5,7 @@ from robot.util.SerialHelper import SerialHelper
 from robot.subsystems.Vision import Vision
 from robot.commands.TeleopCommand import Teleop
 from robot.commands.TurnDrive import TurnDrive
+from robot.commands.Search import Search
 
 
 class RobotContainer:
@@ -112,14 +113,21 @@ class RobotContainer:
                 # button i was just pressed
                 if i == 2:  # Square
                     print("Square button pressed.")
-                    cmd = TurnDrive(
+                    cmd1 = TurnDrive(
                         max_speed=self.max_speed,
                         serialHelper=self.serialHelper,
                         vision=self.vision,
                     )
-                    print("  → initializing TurnDrive")
-                    self.drivetrain.set_command(cmd)
-                    print("  → TurnDrive set.")
+                    cmd2 = Search(
+                        serialHelper=self.serialHelper,
+                        vision=self.vision,
+                        turn_speed=20,
+                    )
+
+                    cmd1.linkedCommand = cmd2
+                    cmd2.linkedCommand = cmd1
+                    print("Auto execute")
+                    self.drivetrain.set_command(cmd2)
                 elif i == 3:  # Triangle
                     print("Triangle button pressed.")
                     cmd = Teleop(

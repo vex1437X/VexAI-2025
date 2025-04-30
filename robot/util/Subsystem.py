@@ -15,6 +15,7 @@ class Subsystem:
             self.command.execute()
             if self.command.is_finished():
                 self.command.end(False)
+                self.command = self.command.linkedCommand
 
     def set_command(self, command):
         """

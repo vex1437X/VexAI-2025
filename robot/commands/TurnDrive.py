@@ -3,6 +3,7 @@ import math
 from simple_pid import PID
 from robot.util.Constants import Instruction
 import math
+import time
 
 
 class TurnDrive(Command):
@@ -33,43 +34,52 @@ class TurnDrive(Command):
         # Flags to track completion of turning and driving
         self.turn_finished = False
         self.drive_finished = False
+        self.tof_finished = False
         # print("TurnDrive initialized.")
 
     def execute(self):
         """
         Execute the TurnDrive command. This method is called periodically.
         """
-        try:
-            raw = self.vision.process_frame()
 
-            # normalize into a flat list of (x,z) tuples
-            if raw is None:
-                candidates = []
-            elif isinstance(raw, dict):
-                candidates = list(raw.values())
-            else:
-                candidates = raw
+        offsets = None
 
-            # find the nearest ring
-            best_offset = None
-            best_dist = float("inf")
-            for offs in candidates:
-                # offs might be None or malformed
-                if not offs or len(offs) < 2:
-                    continue
-                x_off, z_off = offs
-                d = math.hypot(x_off, z_off)
-                if d < best_dist:
-                    best_dist = d
-                    best_offset = (x_off, z_off)
+        if hasattr(self, "_drive_start_time"):
+            print(f"Drive start time: {time.time() - self._drive_start_time}")
+            if time.time() - self._drive_start_time >= 0.5:
+                self.drive_finished = True
+        if self.tof_finished == False:
+            try:
+                raw = self.vision.process_frame()
 
-            offsets = best_offset
-            print(f"Best offsets detected: {offsets}")
+                # normalize into a flat list of (x,z) tuples
+                if raw is None:
+                    candidates = []
+                elif isinstance(raw, dict):
+                    candidates = list(raw.values())
+                else:
+                    candidates = raw
 
-        except Exception as e:
-            # if anything goes wrong, treat as “no detection”
-            print(f"Vision error in execute(): {e}")
-            offsets = None
+                # find the nearest ring
+                best_offset = None
+                best_dist = float("inf")
+                for offs in candidates:
+                    # offs might be None or malformed
+                    if not offs or len(offs) < 2:
+                        continue
+                    x_off, z_off = offs
+                    d = math.hypot(x_off, z_off)
+                    if d < best_dist:
+                        best_dist = d
+                        best_offset = (x_off, z_off)
+
+                offsets = best_offset
+                # print(f"Best offsets detected: {offsets}")
+
+            except Exception as e:
+                # if anything goes wrong, treat as “no detection”
+                # print(f"Vision error in execute(): {e}")
+                offsets = None
 
         # ensure we have a pair
         if not offsets:
@@ -93,14 +103,14 @@ class TurnDrive(Command):
             return
 
         delta_angle = math.degrees(math.atan2(x_offset, z_offset))
-        print(f"Delta angle for turning: {delta_angle}")
+        # print(f"Delta angle for turning: {delta_angle}")
 
         if abs(delta_angle) < 1:
             # print("Delta angle within threshold. Turning finished.")
             self.turn_finished = True
         else:
             turn_speed = self.turn_pid(delta_angle)
-            print(f"Calculated turn speed: {turn_speed}")
+            # print(f"Calculated turn speed: {turn_speed}")
             self._set_motor_speeds(-turn_speed, turn_speed)
 
     def _handle_driving(self, z_offset):
@@ -112,11 +122,15 @@ class TurnDrive(Command):
             return
 
         drive_speed = self.drive_pid(z_offset)
-        print(f"Calculated drive speed: {drive_speed}")
+        # print(f"Calculated drive speed: {drive_speed}")
 
-        if abs(z_offset) < 0.2:
+        # drive more when vision lost (TODO: stop when color sensor senses ring)
+        print(f"Z offset: {abs(z_offset)}")
+        if abs(z_offset) < 0.5:
             # print("Z offset within threshold. Driving finished.")
-            self.drive_finished = True
+            if not hasattr(self, "_drive_start_time"):
+                self._drive_start_time = time.time()
+                self.tof_finished = True
         else:
             self._set_motor_speeds(-drive_speed, -drive_speed)
 
@@ -132,13 +146,19 @@ class TurnDrive(Command):
     def start(self):
         self.turn_finished = False
         self.drive_finished = False
+        self.tof_finished = False
 
     def end(self, interrupted=False):
         self._stop_motors()
         self.turn_pid.reset()
         self.drive_pid.reset()
+        print("TurnDrive command ended.")
         self.turn_finished = False
         self.drive_finished = False
+        self.tof_finished = False
+        if hasattr(self, "_drive_start_time"):
+            del self._drive_start_time
 
     def is_finished(self):
+        # print(f"Finished? {self.turn_finished} {self.drive_finished} ")
         return self.turn_finished and self.drive_finished
