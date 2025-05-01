@@ -9,7 +9,7 @@ class Search(Command):
         self.vision = vision
 
     def start(self):
-        pass
+        print("Search command started.")
 
     def execute(self):
         # turn left until an object is detected, then end the command

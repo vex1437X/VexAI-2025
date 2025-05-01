@@ -1,3 +1,7 @@
+from robot.commands.Search import Search
+from robot.commands.TurnDrive import TurnDrive
+
+
 class Subsystem:
     """
     Base class for all robot subsystems.
@@ -11,11 +15,24 @@ class Subsystem:
         """
         Periodically execute the scheduled commands.
         """
+        print("Command class is" + str(type(self.command)))
         if self.command:
             self.command.execute()
             if self.command.is_finished():
                 self.command.end(False)
-                self.command = self.command.linkedCommand
+                if isinstance(self.command, Search):
+                    self.command = TurnDrive(
+                        serialHelper=self.serialHelper,
+                        vision=self.command.vision,
+                    )
+                elif isinstance(self.command, TurnDrive):
+                    self.command = Search(
+                        serialHelper=self.serialHelper,
+                        vision=self.command.vision,
+                    )
+                else:
+                    self.command = None
+                self.command.start()
 
     def set_command(self, command):
         """
