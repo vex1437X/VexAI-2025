@@ -1,4 +1,4 @@
-from robot.RobotContainer import RobotContainer
+from src.robot.RobotContainer import RobotContainer
 import time
 
 

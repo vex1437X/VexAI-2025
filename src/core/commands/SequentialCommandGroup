@@ -1,0 +1,28 @@
+from typing import List
+from .Command import Command
+
+class SequentialCommandGroup(Command):
+    """
+    Runs a list of commands in sequence.
+    """
+    def __init__(self, commands: List[Command]):
+        super().__init__()
+        self._commands = commands
+        self._index = 0
+
+    def initialize(self) -> None:
+        pass
+
+    def execute(self) -> None:
+        current = self._commands[self._index]
+        current._run()
+        if current.is_finished():
+            current.end(False)
+            self._index += 1
+
+    def is_finished(self) -> bool:
+        return self._index >= len(self._commands)
+
+    def end(self, interrupted: bool) -> None:
+        if interrupted and self._index < len(self._commands):
+            self._commands[self._index].end(True)

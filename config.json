@@ -1,0 +1,16 @@
+{
+    "serial_port": "/dev/tty.usbmodem142303",
+    "baud_rate": 9600,
+    "timeout": 0.01,
+    "max_speed": 1.0,
+    "deadzone": 0.05,
+    "camera_settings": {
+      "width": 640,
+      "height": 480,
+      "fps": 30
+    },
+    "fl_motor_id" : 1,
+    "fr_motor_id" : 2,
+    "bl_motor_id" : 3,
+    "br_motor_id" : 4
+  }
