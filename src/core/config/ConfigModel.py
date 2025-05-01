@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
+
 class ConfigModel(BaseModel):
     serial_port: str
     baud_rate: int = 115200
@@ -7,10 +8,10 @@ class ConfigModel(BaseModel):
     max_speed: float
     deadzone: float = 0.05
     camera_settings: dict
-    fl_motor_id: int
-    fr_motor_id: int
-    bl_motor_id: int
-    br_motor_id: int
+    fl_motor_id: int = 1
+    fr_motor_id: int = 2
+    bl_motor_id: int = 3
+    br_motor_id: int = 4
 
     class Config:
         extra = "forbid"

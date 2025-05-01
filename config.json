@@ -1,5 +1,5 @@
 {
-    "serial_port": "/dev/tty.usbmodem142303",
+    "serial_port": "/dev/tty.usbmodem143103",
     "baud_rate": 9600,
     "timeout": 0.01,
     "max_speed": 1.0,

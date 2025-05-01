@@ -13,10 +13,12 @@ from .commands.TeleopCommand import TeleopCommand
 
 from tests.dummies import DummyMotor
 
+
 def load_config() -> ConfigModel:
     # Load raw JSON and validate with Pydantic v2
-    content = Path('config.json').read_text()
+    content = Path("config.json").read_text()
     return ConfigModel.model_validate_json(content)
+
 
 class RobotContainer:
     def __init__(
@@ -51,7 +53,7 @@ class RobotContainer:
             self.controller = joystick
 
         # Subsystems
-        self.drivetrain = Drivetrain(joystick=self.controller, fl_motor = DummyMotor(), fr_motor = DummyMotor(), bl_motor = DummyMotor(), br_motor = DummyMotor())
+        self.drivetrain = Drivetrain()
         self.vision_system = Vision(
             camera=self.camera,
         )

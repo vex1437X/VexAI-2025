@@ -3,7 +3,7 @@ from enum import Enum
 
 class Instruction(Enum):
     DRIVE_SET = 0x07
-    MOTOR_SET = 0x20
+    MOTOR_SET = 0x05
 
 
 # Enum for data tags used in VEX data packets

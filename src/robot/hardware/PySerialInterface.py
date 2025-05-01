@@ -3,6 +3,10 @@ import struct
 from src.core.config.ConfigModel import ConfigModel
 from src.core.hardware.SerialInterface import SerialInterface
 from src.core.config.util import Instruction, DataTag
+from src.core.logging.logger_config import get_logger
+
+logger = get_logger(__name__)
+
 
 class PySerialInterface(SerialInterface):
     START = 0xAA
@@ -15,15 +19,15 @@ class PySerialInterface(SerialInterface):
     def get_instance(cls, config: ConfigModel = None) -> "PySerialInterface":
         if cls._instance is None:
             if config is None:
-                raise RuntimeError("First call to get_instance() must pass a ConfigModel")
+                raise RuntimeError(
+                    "First call to get_instance() must pass a ConfigModel"
+                )
             # create, open, and store the one instance
             cls._instance = cls(config)
             cls._instance.open()
         return cls._instance
 
-    def __init__(
-        self, config: ConfigModel
-    ):
+    def __init__(self, config: ConfigModel):
         self.serial_port = config.serial_port
         self.baud_rate = config.baud_rate
         self.timeout = config.timeout
@@ -31,11 +35,7 @@ class PySerialInterface(SerialInterface):
         self.rx_buffer = bytearray()
 
     def open(self) -> None:
-        self.ser = serial.Serial(
-            self.serial_port,
-            self.baud_rate,
-            timeout=self.timeout
-        )
+        self.ser = serial.Serial(self.serial_port, self.baud_rate, timeout=self.timeout)
 
     def read(self, size: int = 1024) -> bytes:
         incoming = self.ser.read(size)
@@ -49,6 +49,7 @@ class PySerialInterface(SerialInterface):
         if self.ser and self.ser.is_open:
             self.ser.write(data)
             self.ser.flush()
+            # logger.info(f"Sent data: {data}")
 
     def close(self) -> None:
         if self.ser and self.ser.is_open:
@@ -57,7 +58,7 @@ class PySerialInterface(SerialInterface):
     def build_doubles(self, doubles: list[float]) -> bytearray:
         raw = bytearray()
         for val in doubles:
-            raw.extend(struct.pack(">d", val))
+            raw.extend(struct.pack(">d", float(val)))
         return raw
 
     def escape_bytes(self, data: bytes) -> bytearray:
@@ -77,6 +78,7 @@ class PySerialInterface(SerialInterface):
         packet = bytearray([self.START, instr.value])
         packet.extend(self.escape_bytes(self.build_doubles(operands)))
         packet.append(self.END)
+        logger.info(f"Encoded instruction {instr.name} with operands {operands}")
         return bytes(packet)
 
     def _extract_packets(self) -> list[dict]:
@@ -88,7 +90,7 @@ class PySerialInterface(SerialInterface):
                 escaped = bytearray()
                 while j < len(self.rx_buffer) and self.rx_buffer[j] != self.END:
                     if self.rx_buffer[j] == self.ESCAPE and j + 1 < len(self.rx_buffer):
-                        code = self.rx_buffer[j+1]
+                        code = self.rx_buffer[j + 1]
                         if code == 0x00:
                             escaped.append(self.START)
                         elif code == 0x01:
@@ -123,7 +125,7 @@ class PySerialInterface(SerialInterface):
                 break
             if idx + 8 > len(packet_bytes):
                 break
-            value = struct.unpack(">d", packet_bytes[idx:idx+8])[0]
+            value = struct.unpack(">d", packet_bytes[idx : idx + 8])[0]
             idx += 8
             data[tag] = value
         return data

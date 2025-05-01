@@ -5,6 +5,7 @@ import pygame
 
 logger = get_logger(__name__)
 
+
 class TeleopCommand(Command):
     def __init__(self, drivetrain=None, drive_mode="tank", max_speed=50, joystick=None):
         super().__init__()
@@ -14,14 +15,14 @@ class TeleopCommand(Command):
         self.joystick = joystick
 
     def execute(self):
-        # pygame.event.pump()
+        pygame.event.pump()
         if self.drive_mode == "tank":
             left_y = -self.apply_deadzone(self.joystick.get_axis(1))
             right_y = -self.apply_deadzone(self.joystick.get_axis(3))
             left_speed = left_y * self.max_speed
             right_speed = right_y * self.max_speed
             self.drivetrain.set_speed(left_speed, right_speed)
-        logger.info(f"Driving go brrr {left_y} + f{right_y}")
+            # logger.info(f"Driving go brrr {left_y} + f{right_y}")
 
     def initialize(self):
         pass
