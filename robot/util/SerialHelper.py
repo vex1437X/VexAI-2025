@@ -1,6 +1,7 @@
 import serial
 import struct
 from robot.util.Constants import *
+from robot.util.Constants import DataTag
 
 
 class SerialHelper:
@@ -78,11 +79,7 @@ class SerialHelper:
             # Read the data tag
             tag_val = packet_bytes[idx]
             idx += 1
-            tag = (
-                self.DataTag(tag_val)
-                if tag_val in (t.value for t in self.DataTag)
-                else None
-            )
+            tag = DataTag(tag_val) if tag_val in (t.value for t in DataTag) else None
             if tag is None:
                 break
 

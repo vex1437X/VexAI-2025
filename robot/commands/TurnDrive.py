@@ -153,9 +153,6 @@ class TurnDrive(Command):
         self.turn_pid.reset()
         self.drive_pid.reset()
         print("TurnDrive command ended.")
-        self.turn_finished = False
-        self.drive_finished = False
-        self.tof_finished = False
         if hasattr(self, "_drive_start_time"):
             del self._drive_start_time
 

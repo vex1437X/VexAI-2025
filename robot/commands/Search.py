@@ -33,4 +33,4 @@ class Search(Command):
             Instruction.DRIVE_SET, [0, 0, 0, 0]
         )
         self.serialHelper.send_command(command)
-        # print("Search command ended.")
+        print("Search command ended.")

@@ -15,24 +15,29 @@ class Subsystem:
         """
         Periodically execute the scheduled commands.
         """
-        print("Command class is" + str(type(self.command)))
+        # print("Command class is" + str(type(self.command)))
         if self.command:
             self.command.execute()
             if self.command.is_finished():
                 self.command.end(False)
                 if isinstance(self.command, Search):
-                    self.command = TurnDrive(
-                        serialHelper=self.serialHelper,
-                        vision=self.command.vision,
+                    print("Search finished lets go turn!")
+                    self.set_command(
+                        TurnDrive(
+                            serialHelper=self.serialHelper,
+                            vision=self.command.vision,
+                        )
                     )
                 elif isinstance(self.command, TurnDrive):
-                    self.command = Search(
-                        serialHelper=self.serialHelper,
-                        vision=self.command.vision,
+                    print("TurnDrive finished lets go search!")
+                    self.set_command(
+                        Search(
+                            serialHelper=self.serialHelper,
+                            vision=self.command.vision,
+                        )
                     )
                 else:
                     self.command = None
-                self.command.start()
 
     def set_command(self, command):
         """

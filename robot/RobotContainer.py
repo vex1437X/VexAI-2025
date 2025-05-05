@@ -56,7 +56,11 @@ class RobotContainer:
             serialHelper=self.serialHelper,
         )
         self.drivetrain.set_command(
-            TurnDrive(vision=self.vision, serialHelper=self.serialHelper)
+            TurnDrive(
+                max_speed=self.max_speed,
+                serialHelper=self.serialHelper,
+                vision=self.vision,
+            )
         )
         print("Drivetrain initialized.")
 
@@ -104,43 +108,61 @@ class RobotContainer:
         if not self.joystick:
             return
 
-            # # make sure your previous_button_states is the right length
-            # num_buttons = self.joystick.get_numbuttons()
-            # if len(self.previous_button_states) != num_buttons:
-            #     self.previous_button_states = [False] * num_buttons
+        # make sure your previous_button_states is the right length
+        num_buttons = self.joystick.get_numbuttons()
+        if len(self.previous_button_states) != num_buttons:
+            self.previous_button_states = [False] * num_buttons
 
-            # # check every button for a “rising edge”
-            # for i in range(num_buttons):
-            #     current = self.joystick.get_button(i)
-            #     if current and not self.previous_button_states[i]:
-            #         # button i was just pressed
-            #         if i == 2:  # Square
-            #             print("Square button pressed.")
-            #             cmd1 = TurnDrive(
-            #                 max_speed=self.max_speed,
-            #                 serialHelper=self.serialHelper,
-            #                 vision=self.vision,
-            #             )
-            #             cmd2 = Search(
-            #                 serialHelper=self.serialHelper,
-            #                 vision=self.vision,
-            #                 turn_speed=20,
-            #             )
+        turnDriveCMD = TurnDrive(
+            max_speed=self.max_speed,
+            serialHelper=self.serialHelper,
+            vision=self.vision,
+        )
+        searchCMD = Search(
+            serialHelper=self.serialHelper,
+            vision=self.vision,
+            turn_speed=20,
+        )
 
-            #             cmd1.linkedCommand = cmd2
-            #             cmd2.linkedCommand = cmd1
-            #             print("Auto execute")
-            #             self.drivetrain.set_command(cmd2)
-            #         elif i == 3:  # Triangle
-            #             print("Triangle button pressed.")
-            #             cmd = Teleop(
-            #                 joystick=self.joystick,
-            #                 max_speed=self.max_speed,
-            #                 drive_mode="tank",
-            #                 serialHelper=self.serialHelper,
-            #             )
-            #             print("  → initializing Teleop")
-            #             self.drivetrain.set_command(cmd)
+        # turnDriveCMD.linkedCommand = searchCMD
+        # searchCMD.linkedCommand = turnDriveCMD
 
-            # update for next frame
-            self.previous_button_states[i] = current
+        teleCMD = Teleop(
+            joystick=self.joystick,
+            max_speed=self.max_speed,
+            drive_mode="tank",
+            serialHelper=self.serialHelper,
+        )
+
+        # check every button for a “rising edge”
+        # for i in range(num_buttons):
+        #     current = self.joystick.get_button(i)
+        #     if current and not self.previous_button_states[i]:
+        #         # button i was just pressed
+        #         if i == 2:  # Square
+        #             print("Square button pressed.")
+        #             print("Auto execute")
+        #             self.drivetrain.set_command(searchCMD)
+        #         elif i == 3:  # Triangle
+        #             print("Triangle button pressed.")
+        #             print("  → initializing Teleop")
+        #             self.drivetrain.set_command(teleCMD)
+
+        # update for next frame
+        # self.previous_button_states[i] = current
+        # Track the time since the last detection
+        if not hasattr(self, "_last_detection_time"):
+            self._last_detection_time = pygame.time.get_ticks()
+
+        if len(self.vision.process_frame()) > 0:
+            # Reset the timer if there are detections
+            self._last_detection_time = pygame.time.get_ticks()
+        else:
+            # Check if 0.5 seconds have passed without detections
+            current_time = pygame.time.get_ticks()
+            if current_time - self._last_detection_time >= 1000:
+                if not isinstance(self.drivetrain.command, Search):
+                    self.drivetrain.set_command(searchCMD)
+                    print("Search command set. vision")
+
+        self.vision.frame_done = False
