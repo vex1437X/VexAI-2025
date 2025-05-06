@@ -211,7 +211,7 @@ class Vision(Subsystem):
             self.pipeline = None
             self.device = None
 
-    def process_frame(self):
+    def process_frame(self, label_name="Red-Ring"):
         if self.pipeline is None or self.device is None:
             print("DepthAI device not initialized.")
             return {}
@@ -219,7 +219,14 @@ class Vision(Subsystem):
         in_preview = self.preview_queue.get()
         in_detections = self.detection_nn_queue.get()
         self.current_frame = in_preview.getCvFrame()
-        self.current_detections = in_detections.detections
+
+        for detection in in_detections.detections:
+            label = self.labels[detection.label]
+            if label == label_name:
+                self.current_detections.append(detection)
+            else:
+                pass
+
 
         if self.output_depth and self.depth_queue is not None:
             in_depth = self.depth_queue.get()
