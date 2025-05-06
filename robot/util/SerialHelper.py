@@ -11,7 +11,7 @@ class SerialHelper:
     ESCAPE = 0xAC
 
     def __init__(
-        self, serial_port="/dev/tty.usbmodem143103", baud_rate=9600, timeout=0.01
+        self, serial_port="/dev/ttyACM1", baud_rate=9600, timeout=0.01
     ):
         # Initialize serial communication parameters
         self.serial_port = serial_port

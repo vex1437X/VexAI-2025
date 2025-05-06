@@ -31,7 +31,7 @@ class RobotContainer:
 
         # Hardcoded configuration values
         # self.logger.info("Setting configuration values...")
-        self.serial_port = "/dev/tty.usbmodem143103"
+        self.serial_port = "/dev/ttyACM1"
         self.baud_rate = 9600
         self.max_speed = 50
 

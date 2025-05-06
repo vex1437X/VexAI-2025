@@ -1,19 +1,19 @@
-import pyrealsense2 as rs
-import numpy as np
-import cv2
-import sys
-from scipy.spatial import distance as dist
-from robot.util.Subsystem import Subsystem
 
+import cv2
+import depthai as dai
+import numpy as np
+from scipy.spatial import distance as dist
+from pathlib import Path
+import blobconverter
+import argparse
+import json
+from robot.util.Subsystem import Subsystem  # Assuming Subsystem is in this relative path
 
 class CentroidTracker:
-    """
-    Tracks object centroids across frames, allowing temporary disappearances.
-    """
-
+    # ... (CentroidTracker class remains the same as before)
     def __init__(self, max_disappeared=5):
         self.next_object_id = 0
-        self.objects = dict()  # object_id -> centroid
+        self.objects = dict()  # object_id -> centroid (spatial_x, spatial_z)
         self.disappeared = dict()  # object_id -> consecutive missing count
         self.max_disappeared = max_disappeared
 
@@ -26,234 +26,229 @@ class CentroidTracker:
         del self.objects[object_id]
         del self.disappeared[object_id]
 
-    def update(self, input_centroids):
+    def update(self, detections, frame_width, frame_height):
         # no detections → mark all existing as disappeared
-        if len(input_centroids) == 0:
+        if len(detections) == 0:
             for oid in list(self.disappeared):
                 self.disappeared[oid] += 1
                 if self.disappeared[oid] > self.max_disappeared:
                     self.deregister(oid)
             return self.objects
 
+        # Extract centroids from detections
+        input_centroids = []
+        for detection in detections:
+            # Use the center of the bounding box and the spatial coordinates
+            cx = int((detection.xmin + detection.xmax) / 2 * frame_width)
+            cy = int((detection.ymin + detection.ymax) / 2 * frame_height)
+            sx = detection.spatialCoordinates.x / 1000  # Convert mm to meters
+            sz = detection.spatialCoordinates.z / 1000  # Convert mm to meters
+            input_centroids.append((cx, cy, sx, sz)) # Store cx, cy, spatial x, spatial z
+
         # first frame or no existing tracks → register all
         if len(self.objects) == 0:
             for c in input_centroids:
-                self.register(c)
+                # Register with spatial x and z
+                self.register((c[2], c[3]))
             return self.objects
 
         # otherwise match input centroids to existing ones
         object_ids = list(self.objects.keys())
-        object_centroids = list(self.objects.values())
-        D = dist.cdist(np.array(object_centroids), np.array(input_centroids))
+        object_centroids_2d = [obj[:2] for obj in self.objects.values()] # Use only 2D for matching
+        input_centroids_2d = [c[:2] for c in input_centroids]
+
+        if not object_centroids_2d or not input_centroids_2d:
+            return self.objects  # Avoid errors if lists are empty
+
+        # Calculate distances based on 2D centroid (x, y)
+        D = dist.cdist(np.array(object_centroids_2d), np.array(input_centroids_2d))
 
         rows = D.min(axis=1).argsort()
         cols = D.argmin(axis=1)[rows]
 
         used_rows, used_cols = set(), set()
+        updated_objects = {}
         for r, c in zip(rows, cols):
             if r in used_rows or c in used_cols:
                 continue
-            # skip if jump is too large
-            if D[r, c] > 50:
-                continue
             oid = object_ids[r]
-            self.objects[oid] = input_centroids[c]
+            # Update tracked object with the new spatial x and z
+            self.objects[oid] = (input_centroids[c][2], input_centroids[c][3])
             self.disappeared[oid] = 0
+            updated_objects[oid] = (input_centroids[c][2], input_centroids[c][3])
             used_rows.add(r)
             used_cols.add(c)
 
         # any unmatched existing → disappeared
-        for r in set(range(len(object_centroids))) - used_rows:
+        for r in set(range(len(object_centroids_2d))) - used_rows:
             oid = object_ids[r]
             self.disappeared[oid] += 1
             if self.disappeared[oid] > self.max_disappeared:
                 self.deregister(oid)
 
         # any unmatched new centroids → register
-        for c in set(range(len(input_centroids))) - used_cols:
-            self.register(input_centroids[c])
+        for c in set(range(len(input_centroids_2d))) - used_cols:
+            # Register with spatial x and z
+            self.register((input_centroids[c][2], input_centroids[c][3]))
 
         return self.objects
 
-
 class Vision(Subsystem):
     """
-    Vision subsystem for detecting (and tracking) red rings using an Intel RealSense depth camera.
-
-    A bounding‑box width/height ratio filter has been added so only blobs whose
-    width is approximately `desired_ratio * height` are considered valid. This
-    helps reject tall/skinny or square noise blobs while keeping ring‑shaped
-    detections.
+    Vision subsystem for detecting objects using DepthAI and tracking them,
+    returning tracked object IDs with their X and Z coordinates, consistent with
+    the original Vision subsystem.
     """
-
-    def __init__(
-        self,
-        serialHelper=None,
-        desired_ratio: float = 2.0,
-        ratio_tolerance: float = 1,
-    ):
-        """
-        :param desired_ratio: Ideal width/height ratio (w / h). 2.0 means width ≈ 2× height.
-        :param ratio_tolerance: Acceptable fractional deviation from desired_ratio.
-                                e.g. 0.25 → ±25 % margin, so 2.0 ± 0.5.
-        """
+    def __init__(self, configPath='best.json', model_name='best_openvino_2022.1_6shave.blob', serialHelper=None, output_depth=False):
         super().__init__(serialHelper)
-        self.pipeline = rs.pipeline()
-        self.config = rs.config()
-        self.align = rs.align(rs.stream.color)
-
-        self.frame_done = False
-        self.results = {}
-
-        # ratio‑filter settings
-        self.desired_ratio = desired_ratio
-        self.ratio_tolerance = ratio_tolerance
-
-        # configure & start camera
-        self._configure_pipeline()
-
-        # multi‑ring tracker (allows up to 5 dropped frames)
+        self.config_path = Path(configPath)
+        self.model_name = model_name
+        self.pipeline = None
+        self.device = None
+        self.preview_queue = None
+        self.detection_nn_queue = None
+        self.depth_queue = None  # New depth queue
+        self.nn_config = {}
+        self.metadata = {}
+        self.labels = {}
+        self.W, self.H = 416, 416  # Default input size
         self.tracker = CentroidTracker(max_disappeared=5)
+        self.frame_width = 0
+        self.frame_height = 0
+        self.output_depth = output_depth  # Flag to output depth (internal use)
+        self.current_frame = None
+        self.current_detections = []
+        self.current_depth_frame = None
+        self._load_config()
+        self._create_pipeline()
+        self._start_device()
 
-    # ---------------------------------------------------------------------
-    # Camera configuration
-    # ---------------------------------------------------------------------
-    def _configure_pipeline(self):
-        self.config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-        self.config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+    def _load_config(self):
+        if not self.config_path.exists():
+            raise ValueError(f"Config path {self.config_path} does not exist!")
+        with self.config_path.open() as f:
+            config = json.load(f)
+        self.nn_config = config.get("nn_config", {})
+        if "input_size" in self.nn_config:
+            self.W, self.H = tuple(map(int, self.nn_config.get("input_size").split('x')))
+        self.metadata = self.nn_config.get("NN_specific_metadata", {})
+        self.labels = config.get("mappings", {}).get("labels", {})
+
+    def _create_pipeline(self):
+        self.pipeline = dai.Pipeline()
+
+        # Define sources and outputs
+        camRgb = self.pipeline.create(dai.node.ColorCamera)
+        detectionNetwork = self.pipeline.create(dai.node.YoloSpatialDetectionNetwork)
+        monoLeft = self.pipeline.create(dai.node.MonoCamera)
+        monoRight = self.pipeline.create(dai.node.MonoCamera)
+        stereo = self.pipeline.create(dai.node.StereoDepth)
+        xoutRgb = self.pipeline.create(dai.node.XLinkOut)
+        xoutNN = self.pipeline.create(dai.node.XLinkOut)
+
+        xoutRgb.setStreamName("rgb")
+        xoutNN.setStreamName("detections")
+
+        # Output for depth frame (if needed internally)
+        if self.output_depth:
+            xoutDepth = self.pipeline.create(dai.node.XLinkOut)
+            xoutDepth.setStreamName("depth")
+            stereo.depth.link(xoutDepth.input)
+
+        # Properties
+        camRgb.setPreviewSize(self.W, self.H)
+        camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_720_P)
+        camRgb.setInterleaved(False)
+        camRgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)
+        camRgb.setFps(40)
+
+        monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+        monoLeft.setCamera("left")
+        monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+        monoLeft.out.link(stereo.left)
+        monoRight.out.link(stereo.right)
+
+        stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
+        stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)
+        stereo.setOutputSize(monoLeft.getResolutionWidth(), monoLeft.getResolutionHeight())
+        stereo.setSubpixel(True)
+
+        # Network specific settings
+        nnPath = self.model_name
+        if not Path(nnPath).exists():
+            print(f"No blob found at {nnPath}. Looking into DepthAI model zoo.")
+            nnPath = str(blobconverter.from_zoo(self.model_name, shaves=6, zoo_type="depthai", use_cache=True))
+        detectionNetwork.setBlobPath(nnPath)
+        detectionNetwork.setConfidenceThreshold(self.metadata.get("confidence_threshold", 0.5))
+        detectionNetwork.input.setBlocking(False)
+        detectionNetwork.setBoundingBoxScaleFactor(0.5)
+        detectionNetwork.setDepthLowerThreshold(100)
+        detectionNetwork.setDepthUpperThreshold(5000)
+        detectionNetwork.setNumClasses(self.metadata.get("classes", 80))
+        detectionNetwork.setCoordinateSize(self.metadata.get("coordinates", 4))
+        detectionNetwork.setAnchors(self.metadata.get("anchors", []))
+        detectionNetwork.setAnchorMasks(self.metadata.get("anchor_masks", {}))
+        detectionNetwork.setIouThreshold(self.metadata.get("iou_threshold", 0.5))
+        detectionNetwork.setNumInferenceThreads(2)
+
+        # Linking
+        camRgb.preview.link(detectionNetwork.input)
+        detectionNetwork.passthrough.link(xoutRgb.input)
+        detectionNetwork.out.link(xoutNN.input)
+        stereo.depth.link(detectionNetwork.inputDepth)
+
+    def _start_device(self):
         try:
-            self.pipeline.start(self.config)
-            print("RealSense pipeline started.")
-        except RuntimeError as e:
-            print(f"⚠️  Could not start RealSense pipeline: {e}")
-            raise
-
-    # ---------------------------------------------------------------------
-    # Main per‑frame processing
-    # ---------------------------------------------------------------------
-    def process_frame(self, min_blob_size: int = 5000):
-        """
-        Process a frame and return a dict of tracked rings:
-           { track_id: (x_offset, z_offset), … }
-
-        Filtering criteria:
-          • Blob area >= ``min_blob_size``
-          • Bounding‑box ``width / height`` within ``desired_ratio ± ratio_tolerance * desired_ratio``
-        """
-
-        if self.frame_done:
-            return self.results
-        try:
-            frames = self.pipeline.wait_for_frames()
-            aligned = self.align.process(frames)
-            depth_frame = aligned.get_depth_frame()
-            color_frame = aligned.get_color_frame()
-            if not depth_frame or not color_frame:
-                return {}
-
-            color_image = np.asanyarray(color_frame.get_data())
-            mask = self._generate_mask(color_image)
-
-            # -----------------------------------------------------------------
-            # Connected‑components analysis to locate ring candidates
-            # -----------------------------------------------------------------
-            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
-                mask
-            )
-            input_cs = []
-            for i in range(1, num_labels):
-                area = stats[i, cv2.CC_STAT_AREA]
-                if area < min_blob_size:
-                    continue  # ignore small noise
-
-                w = stats[i, cv2.CC_STAT_WIDTH]
-                h = stats[i, cv2.CC_STAT_HEIGHT]
-                if h == 0:
-                    continue  # avoid division by zero
-                ratio = w / float(h)
-
-                # apply ratio filter
-                if (
-                    abs(ratio - self.desired_ratio)
-                    > self.ratio_tolerance * self.desired_ratio
-                ):
-                    continue
-
-                (cx, cy) = centroids[i]
-                input_cs.append((int(cx), int(cy)))
-
-            # update centroid tracker with filtered detections
-            objects = self.tracker.update(input_cs)
-
-            # -----------------------------------------------------------------
-            # Deproject each track to (x, z) world offsets
-            # -----------------------------------------------------------------
-            self.results = {}
-            intr = depth_frame.profile.as_video_stream_profile().intrinsics
-            for oid, (cx, cy) in objects.items():
-                depth = depth_frame.get_distance(cx, cy)
-                if depth == 0:
-                    continue
-                x, _, z = rs.rs2_deproject_pixel_to_point(intr, [cx, cy], depth)
-                self.results[oid] = (x, z)
-
-            # -----------------------------------------------------------------
-            # --- Diagnostic visualisation ------------------------------------
-            # -----------------------------------------------------------------
-            cv2.imshow("Color Image", color_image)
-            cv2.imshow("Red Ring Mask", mask)
-
-            output_image = color_image.copy()
-            for i in range(1, num_labels):
-                area = stats[i, cv2.CC_STAT_AREA]
-                if area < min_blob_size:
-                    continue
-
-                w = stats[i, cv2.CC_STAT_WIDTH]
-                h = stats[i, cv2.CC_STAT_HEIGHT]
-                if h == 0:
-                    continue
-                ratio = w / float(h)
-                if (
-                    abs(ratio - self.desired_ratio)
-                    > self.ratio_tolerance * self.desired_ratio
-                ):
-                    continue
-
-                x, y = stats[i, cv2.CC_STAT_LEFT], stats[i, cv2.CC_STAT_TOP]
-                cv2.rectangle(output_image, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                cv2.putText(
-                    output_image,
-                    f"{area}",
-                    (x, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (0, 255, 0),
-                    1,
-                )
-
-            cv2.imshow("Detections with Bounding Boxes", output_image)
-            cv2.waitKey(1)  # small delay to allow GUI update
-
-            self.frame_done = True
-            return self.results
-
+            self.device = dai.Device(self.pipeline)
+            self.preview_queue = self.device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
+            self.detection_nn_queue = self.device.getOutputQueue(name="detections", maxSize=4, blocking=False)
+            if self.output_depth:
+                self.depth_queue = self.device.getOutputQueue(name="depth", maxSize=4, blocking=False)
+            else:
+                self.depth_queue = None
         except Exception as e:
-            print(f"Error in Vision.process_frame: {e}")
+            print(f"Error connecting to DepthAI device: {e}")
+            self.pipeline = None
+            self.device = None
+
+    def process_frame(self):
+        if self.pipeline is None or self.device is None:
+            print("DepthAI device not initialized.")
             return {}
 
-    # ---------------------------------------------------------------------
-    # Helper functions
-    # ---------------------------------------------------------------------
-    def _generate_mask(self, color_image: np.ndarray) -> np.ndarray:
-        """Return a binary mask for red regions in *color_image* (HSV threshold)."""
-        hsv = cv2.cvtColor(color_image, cv2.COLOR_BGR2HSV)
-        mask1 = cv2.inRange(hsv, (0, 100, 90), (10, 255, 255))
-        mask2 = cv2.inRange(hsv, (170, 100, 90), (179, 255, 255))
-        return cv2.bitwise_or(mask1, mask2)
+        in_preview = self.preview_queue.get()
+        in_detections = self.detection_nn_queue.get()
+        self.current_frame = in_preview.getCvFrame()
+        self.current_detections = in_detections.detections
+
+        if self.output_depth and self.depth_queue is not None:
+            in_depth = self.depth_queue.get()
+            self.current_depth_frame = in_depth.getCvFrame()
+        else:
+            self.current_depth_frame = None
+
+        self.frame_height, self.frame_width = self.current_frame.shape[:2]
+        tracked_objects = self.tracker.update(self.current_detections, self.frame_width, self.frame_height)
+
+        # Prepare the output dictionary with tracked IDs and their X, Z coords
+        tracked_coords = {}
+        for obj_id, coords in tracked_objects.items():
+            tracked_coords[obj_id] = coords  # (spatial_x, spatial_z)
+
+        return tracked_coords
+
+    def get_frame(self):
+        return self.current_frame
+
+    def get_detections(self):
+        return self.current_detections
+
+    def get_depth_frame(self):
+        return self.current_depth_frame
 
     def stop(self):
-        """Stop camera pipeline and close OpenCV windows."""
-        self.pipeline.stop()
+        if self.device is not None:
+            self.device.close()
         cv2.destroyAllWindows()
-        print("RealSense pipeline stopped.")
+        print("DepthAI pipeline stopped.")
+
