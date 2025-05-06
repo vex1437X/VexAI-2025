@@ -36,6 +36,9 @@ class TurnDrive(Command):
         self.drive_finished = False
         self.tof_finished = False
         # print("TurnDrive initialized.")
+        
+        self.ring_lost_time = 0
+        self.start_time = time.time()
 
     def execute(self):
         """
@@ -48,12 +51,14 @@ class TurnDrive(Command):
             print(f"Drive start time: {time.time() - self._drive_start_time}")
             if time.time() - self._drive_start_time >= 0.5:
                 self.drive_finished = True
+        
         if self.tof_finished == False:
             try:
                 raw = self.vision.process_frame()
 
                 # normalize into a flat list of (x,z) tuples
                 if raw is None:
+                    self.ring_lost = time.time()
                     candidates = []
                 elif isinstance(raw, dict):
                     candidates = list(raw.values())
@@ -95,6 +100,9 @@ class TurnDrive(Command):
         # check for completion
         if self.turn_finished and self.drive_finished:
             self._stop_motors()
+            self.end(False)
+            
+        if self.ring_lost_time - self.start_time > 0.5:
             self.end(False)
 
     def _handle_turning(self, x_offset, z_offset):

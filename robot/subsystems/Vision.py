@@ -219,6 +219,8 @@ class Vision(Subsystem):
         in_preview = self.preview_queue.get()
         in_detections = self.detection_nn_queue.get()
         self.current_frame = in_preview.getCvFrame()
+        
+        self.current_detections = []
 
         for detection in in_detections.detections:
             label = self.labels[detection.label]
