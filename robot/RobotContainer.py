@@ -1,4 +1,5 @@
 import pygame
+import numpy as np
 
 from robot.subsystems.Drivetrain import Drivetrain
 from robot.util.SerialHelper import SerialHelper
@@ -6,6 +7,7 @@ from robot.subsystems.Vision import Vision
 from robot.commands.TeleopCommand import Teleop
 from robot.commands.TurnDrive import TurnDrive
 from robot.commands.Search import Search
+from robot.PoseEstimator import PoseEstimator
 
 
 class RobotContainer:
@@ -74,6 +76,14 @@ class RobotContainer:
 
         # self.logger.info("RobotContainer initialization complete.")
 
+        self.pose_estimator = PoseEstimator(
+            wheel_radius_m=(2.75 * 0.0254) / 2,  # wheel radius in meters
+            base_half_length_m=0.2565 / 2,  # half‑chassis length  # <<< TODO
+            base_half_width_m=0.2565 / 2,  # half‑chassis width   # <<< TODO
+            gps_offsets_m=[(-0.019, 0.068), (-0.019, -0.068)],  # GPS0, GPS1  # <<< TODO
+            # using +x and +y as forward and left respectively
+        )
+
     def _initialize_joystick(self):
         """Initialize the joystick, if available."""
         joystick_count = pygame.joystick.get_count()
@@ -101,6 +111,20 @@ class RobotContainer:
         pygame.time.delay(20)
         # ── PROCESS PYGAME EVENTS ──
         pygame.event.pump()
+
+        sensor_data = self.serialHelper.read_vex_data()
+
+        self.pose_estimator.update_pose(
+            wheel=np.array[
+                sensor_data["FL"],
+                sensor_data["FR"],
+                sensor_data["RL"],
+                sensor_data["RR"],
+            ],
+            gyro=sensor_data["Gyro"],
+            gps0=sensor_data["GPS0"],
+            gps1=sensor_data["GPS1"],
+        )
 
         self.drivetrain.tick()
         self.vision.tick()
