@@ -9,12 +9,14 @@ class Instruction(Enum):
 class DataTag(Enum):
     GPS0_X = 0x01
     GPS0_Y = 0x02
-    GPS1_X = 0x03
-    GPS1_Y = 0x04
+    GPS0_H = 0x03
+    GPS1_X = 0x04
+    GPS1_Y = 0x05
+    GPS1_H = 0x06
 
-    GYRO = 0x05
+    GYRO = 0x07
 
     FL = 0x0B
     FR = 0x0C
-    RL = 0x0D
-    RR = 0x0E
+    BL = 0x0D
+    BR = 0x0E

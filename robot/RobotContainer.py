@@ -7,6 +7,7 @@ from robot.subsystems.Vision import Vision
 from robot.commands.TeleopCommand import Teleop
 from robot.commands.TurnDrive import TurnDrive
 from robot.commands.Search import Search
+from robot.util.Constants import DataTag
 from robot.PoseEstimator import PoseEstimator
 
 
@@ -112,18 +113,54 @@ class RobotContainer:
         # ── PROCESS PYGAME EVENTS ──
         pygame.event.pump()
 
-        sensor_data = self.serialHelper.read_vex_data()
+        self.serialHelper.periodic()
+
+        # get the latest sensor data
+
+        wheel_v = np.array(
+            [
+                self.serialHelper.value(DataTag.FL),
+                self.serialHelper.value(DataTag.FR),
+                self.serialHelper.value(DataTag.BL),
+                self.serialHelper.value(DataTag.BR),
+            ]
+        )
+
+        if (
+            self.serialHelper.was_updated(DataTag.GPS0_X)
+            and self.serialHelper.was_updated(DataTag.GPS0_Y)
+            and self.serialHelper.was_updated(DataTag.GPS0_H)
+        ):
+            gps0_data = np.array(
+                [
+                    self.serialHelper.value(DataTag.GPS0_X),
+                    self.serialHelper.value(DataTag.GPS0_Y),
+                    self.serialHelper.value(DataTag.GPS0_H),
+                ]
+            )
+        else:
+            gps0_data = None
+
+        if (
+            self.serialHelper.was_updated(DataTag.GPS1_X)
+            and self.serialHelper.was_updated(DataTag.GPS1_Y)
+            and self.serialHelper.was_updated(DataTag.GPS1_H)
+        ):
+            gps1_data = np.array(
+                [
+                    self.serialHelper.value(DataTag.GPS1_X),
+                    self.serialHelper.value(DataTag.GPS1_Y),
+                    self.serialHelper.value(DataTag.GPS1_H),
+                ]
+            )
+        else:
+            gps1_data = None
 
         self.pose_estimator.update_pose(
-            wheel=np.array[
-                sensor_data["FL"],
-                sensor_data["FR"],
-                sensor_data["RL"],
-                sensor_data["RR"],
-            ],
-            gyro=sensor_data["Gyro"],
-            gps0=sensor_data["GPS0"],
-            gps1=sensor_data["GPS1"],
+            wheel_v=wheel_v,
+            gyro=self.serialHelper.value(DataTag.GYRO),
+            gps1_reading=gps0_data,
+            gps2_reading=gps1_data["GPS1"],
         )
 
         self.drivetrain.tick()

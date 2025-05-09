@@ -1,7 +1,16 @@
 import serial
 import struct
+import time
 from robot.util.Constants import *
 from robot.util.Constants import DataTag
+
+from dataclasses import dataclass, field
+
+
+class VarState:
+    value: float = 0.0  # last value we saw
+    updated: bool = False  # did we see this tag this tick?
+    ts: float = field(default_factory=time.time)  # (optional) wall‑clock of last update
 
 
 class SerialHelper:
@@ -11,14 +20,15 @@ class SerialHelper:
     ESCAPE = 0xAC
 
     def __init__(
-        self, serial_port="/dev/ttyACM1", baud_rate=9600, timeout=0.01
+        self,
+        serial_port: str = "/dev/ttyACM1",
+        baud_rate: int = 9600,
+        timeout: float = 0.01,
     ):
-        # Initialize serial communication parameters
-        self.serial_port = serial_port
-        self.baud_rate = baud_rate
-        self.timeout = timeout
         self.ser = serial.Serial(serial_port, baud_rate, timeout=timeout)
-        self.rx_buffer = bytearray()  # Buffer for incoming data
+        self.rx_buffer = bytearray()
+        # NEW ➜ tag → VarState
+        self.state: dict[DataTag, VarState] = {tag: VarState() for tag in DataTag}
 
     def send_command(self, command: bytes):
         # Send a command over the serial connection
@@ -149,3 +159,31 @@ class SerialHelper:
             self.rx_buffer = self.rx_buffer[i:]
 
         return packets_found
+
+    def periodic(self) -> None:
+        """Read every complete packet in the UART RX buffer
+        and update `self.state` in‑place.
+
+        Call this exactly once per control‑loop iteration.
+        """
+        #  1) clear all updated flags
+        for vs in self.state.values():
+            vs.updated = False
+
+        #  2) pull every finished packet off the wire
+        packets: list[dict] = self.read_vex_data()
+
+        #  3) fold into the state table
+        now = time.time()
+        for pkt in packets:
+            for tag, val in pkt.items():
+                vs = self.state[tag]
+                vs.value = val
+                vs.updated = True
+                vs.ts = now  # optional – handy for timeouts
+
+    def value(self, tag: DataTag) -> float:
+        return self.state[tag].value
+
+    def was_updated(self, tag: DataTag) -> bool:
+        return self.state[tag].updated
