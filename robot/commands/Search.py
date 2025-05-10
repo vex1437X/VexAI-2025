@@ -1,10 +1,11 @@
 from robot.util.Command import Command
 from robot.util.Constants import Instruction
+from robot.util.MotorController import MotorController
 
 
 class Search(Command):
-    def __init__(self, serialHelper=None, vision=None, turn_speed=20):
-        self.serialHelper = serialHelper
+    def __init__(self, motor_controller : MotorController=None, vision=None, turn_speed=20):
+        self.motor_controller = motor_controller
         self.turn_speed = turn_speed
         self.vision = vision
 
@@ -13,11 +14,9 @@ class Search(Command):
 
     def execute(self):
         # turn left until an object is detected, then end the command
-        command = self.serialHelper.encode_instruction(
+        self.motor_controller.set_speed(
             Instruction.DRIVE_SET,
-            [-self.turn_speed, self.turn_speed, -self.turn_speed, self.turn_speed],
-        )
-        self.serialHelper.send_command(command)
+            [-self.turn_speed, self.turn_speed, -self.turn_speed, self.turn_speed])
 
     def is_finished(self):
         # check if an object is detected
@@ -29,8 +28,7 @@ class Search(Command):
 
     def end(self, interrupted=False):
         # stop the motors
-        command = self.serialHelper.encode_instruction(
+        self.motor_controller.set_speed(
             Instruction.DRIVE_SET, [0, 0, 0, 0]
         )
-        self.serialHelper.send_command(command)
         print("Search command ended.")

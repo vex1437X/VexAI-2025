@@ -4,6 +4,7 @@ from simple_pid import PID
 from robot.util.Constants import Instruction
 import math
 import time
+from robot.util.MotorController import MotorController
 
 
 class TurnDrive(Command):
@@ -11,16 +12,16 @@ class TurnDrive(Command):
     Command to turn and drive the robot toward a target detected by the Vision subsystem.
     """
 
-    def __init__(self, max_speed=50, serialHelper=None, vision=None):
+    def __init__(self, max_speed=50, motor_controller : MotorController=None, vision=None):
         """
         Initialize the TurnDrive command.
 
         Args:
             max_speed (float): Maximum speed for turning and driving.
-            serialHelper (SerialHelper): Serial helper for sending commands to the robot.
+            motor_controller (MotorController): MotorController for sending commands to the robot.
             vision (Vision): Vision subsystem for detecting the target.
         """
-        self.serialHelper = serialHelper
+        self.motor_controller = motor_controller
         self.vision = vision
         self.max_speed = max_speed
 
@@ -146,10 +147,9 @@ class TurnDrive(Command):
         self._set_motor_speeds(0, 0)
 
     def _set_motor_speeds(self, left_speed, right_speed):
-        command = self.serialHelper.encode_instruction(
+        self.motor_controller.set_speed(
             Instruction.DRIVE_SET, [left_speed, right_speed, left_speed, right_speed]
         )
-        self.serialHelper.send_command(command)
 
     def start(self):
         self.turn_finished = False
