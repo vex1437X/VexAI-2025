@@ -12,12 +12,13 @@ from robot.PoseEstimator import PoseEstimator
 from robot.util.Controller import Controller
 from robot.util.MotorController import MotorController
 
+
 class RobotContainer:
     # Configuration constants for the robot
-    SERIAL_PORT         = "/dev/ttyACM1"
-    BAUD_RATE           = 9600
-    MAX_SPEED           = 50
-    DETECTION_TIMEOUT   = 1000  # Timeout for vision detection in milliseconds
+    SERIAL_PORT = "/dev/ttyACM1"
+    BAUD_RATE = 9600
+    MAX_SPEED = 50
+    DETECTION_TIMEOUT = 1000  # Timeout for vision detection in milliseconds
 
     def __init__(self):
         # Initialize serial communication and motor controller
@@ -36,28 +37,34 @@ class RobotContainer:
         # Initialize button states and detection timing
         btn_count = self.joystick.get_numbuttons() if self.joystick else 0
         self.previous_button_states = [False] * btn_count
-        self._last_detection_time   = pygame.time.get_ticks()
+        self._last_detection_time = pygame.time.get_ticks()
 
         # Initialize pose estimator for robot localization
         self.pose_estimator = PoseEstimator(
             wheel_radius_m=(2.75 * 0.0254) / 2,  # Convert wheel radius to meters
-            base_half_length_m=0.2565 / 2,      # Half the robot's base length
-            base_half_width_m=0.2565 / 2,       # Half the robot's base width
+            base_half_length_m=0.2565 / 2,  # Half the robot's base length
+            base_half_width_m=0.2565 / 2,  # Half the robot's base width
             gps_offsets_m=[(-0.019, 0.068), (-0.019, -0.068)],  # GPS sensor offsets
         )
 
     def _init_subsystems(self):
         # Initialize vision and drivetrain subsystems
         self.vision = Vision(self.serialHelper)
-        self.drivetrain = Drivetrain(self.joystick, self.MAX_SPEED, "tank", self.serialHelper)
+        self.drivetrain = Drivetrain(
+            self.joystick, self.MAX_SPEED, "tank", self.serialHelper
+        )
 
         # Initialize commands for different robot behaviors
-        self.turn_command = TurnDrive(self.MAX_SPEED, self.motor_controller, self.vision)
+        self.turn_command = TurnDrive(
+            self.MAX_SPEED, self.motor_controller, self.vision
+        )
         self.search_command = Search(self.motor_controller, self.vision, turn_speed=20)
-        self.teleop_command = Teleop(self.joystick, self.MAX_SPEED, "tank", self.motor_controller)
+        self.teleop_command = Teleop(
+            self.joystick, self.MAX_SPEED, "tank", self.motor_controller
+        )
 
         # Set the default command for the drivetrain
-        self.drivetrain.set_command(self.turn_command)
+        self.drivetrain.set_command(self.teleop_command)
 
     def _init_joystick(self):
         # Initialize the joystick hardware
@@ -73,13 +80,17 @@ class RobotContainer:
         js.init()
         print(f"Joystick initialized: {js.get_name()}")
         return js
-    
+
     def _init_button_bindings(self):
         # Bind joystick buttons to specific commands
         self.controller = Controller(self.joystick)
-        self.controller.on_button_down(0, self._schedule_teleop)  # Button 0: Teleop mode
-        self.controller.on_button_down(1, self._schedule_search)  # Button 1: Search mode
-        self.controller.on_button_down(2, self._schedule_turn)    # Button 2: Turn mode
+        self.controller.on_button_down(
+            0, self._schedule_teleop
+        )  # Button 0: Teleop mode
+        self.controller.on_button_down(
+            1, self._schedule_search
+        )  # Button 1: Search mode
+        self.controller.on_button_down(2, self._schedule_turn)  # Button 2: Turn mode
 
     def _schedule_teleop(self):
         # Switch to teleop command
@@ -96,11 +107,13 @@ class RobotContainer:
     def _get_gps_data(self, tag_x, tag_y, tag_h):
         # Retrieve GPS data if all required tags have been updated
         if all(self.serialHelper.was_updated(t) for t in (tag_x, tag_y, tag_h)):
-            return np.array([
-                self.serialHelper.value(tag_x),
-                self.serialHelper.value(tag_y),
-                self.serialHelper.value(tag_h),
-            ])
+            return np.array(
+                [
+                    self.serialHelper.value(tag_x),
+                    self.serialHelper.value(tag_y),
+                    self.serialHelper.value(tag_h),
+                ]
+            )
         return None
 
     def periodic(self):
@@ -111,17 +124,19 @@ class RobotContainer:
         pygame.event.pump()
         for evt in pygame.event.get():
             self.controller.handle_event(evt)
-        
+
         # Update serial communication
         self.serialHelper.periodic()
 
         # Retrieve wheel velocities from sensors
-        wheel_v = np.array([
-            self.serialHelper.value(DataTag.FL),
-            self.serialHelper.value(DataTag.FR),
-            self.serialHelper.value(DataTag.BL),
-            self.serialHelper.value(DataTag.BR),
-        ])
+        wheel_v = np.array(
+            [
+                self.serialHelper.value(DataTag.FL),
+                self.serialHelper.value(DataTag.FR),
+                self.serialHelper.value(DataTag.BL),
+                self.serialHelper.value(DataTag.BR),
+            ]
+        )
 
         # Retrieve GPS data from both sensors
         gps0 = self._get_gps_data(DataTag.GPS0_X, DataTag.GPS0_Y, DataTag.GPS0_H)
@@ -145,7 +160,7 @@ class RobotContainer:
 
         # Automatically switch to search command if no vision targets are detected
         frame = self.vision.process_frame()
-        now   = pygame.time.get_ticks()
+        now = pygame.time.get_ticks()
         if frame:
             self._last_detection_time = now
         elif now - self._last_detection_time > self.DETECTION_TIMEOUT:

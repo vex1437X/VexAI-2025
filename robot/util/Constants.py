@@ -2,6 +2,12 @@ from enum import Enum
 
 
 class Instruction(Enum):
+    LF_SET = 0x01
+    RF_SET = 0x02
+    LB_SET = 0x03
+    RB_SET = 0x04
+    MOTOR_SET = 0x05
+    INTAKE_SET = 0x06
     DRIVE_SET = 0x07
 
 
