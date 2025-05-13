@@ -17,7 +17,7 @@ class RobotContainer:
     # Configuration constants for the robot
     SERIAL_PORT = "/dev/ttyACM1"
     BAUD_RATE = 9600
-    MAX_SPEED = 50
+    MAX_SPEED = 100
     DETECTION_TIMEOUT = 1000  # Timeout for vision detection in milliseconds
 
     def __init__(self):
@@ -32,7 +32,7 @@ class RobotContainer:
 
         # Initialize subsystems and set the default drivetrain command
         self._init_subsystems()
-        self.drivetrain.set_command(self.turn_command)
+        self.drivetrain.set_command(self.teleop_command)
 
         # Initialize button states and detection timing
         btn_count = self.joystick.get_numbuttons() if self.joystick else 0
@@ -49,9 +49,9 @@ class RobotContainer:
 
     def _init_subsystems(self):
         # Initialize vision and drivetrain subsystems
-        self.vision = Vision(self.serialHelper)
+        self.vision = Vision()
         self.drivetrain = Drivetrain(
-            self.joystick, self.MAX_SPEED, "tank", self.serialHelper
+            self.joystick, self.MAX_SPEED, "holonomic", self.motor_controller
         )
 
         # Initialize commands for different robot behaviors
@@ -60,7 +60,7 @@ class RobotContainer:
         )
         self.search_command = Search(self.motor_controller, self.vision, turn_speed=20)
         self.teleop_command = Teleop(
-            self.joystick, self.MAX_SPEED, "tank", self.motor_controller
+            self.joystick, self.MAX_SPEED, "holonomic", self.motor_controller
         )
 
         # Set the default command for the drivetrain
@@ -122,8 +122,8 @@ class RobotContainer:
         # Delay for a fixed time and process joystick events
         pygame.time.delay(20)
         pygame.event.pump()
-        for evt in pygame.event.get():
-            self.controller.handle_event(evt)
+        #for evt in pygame.event.get():
+        #    self.controller.handle_event(evt)
 
         # Update serial communication
         self.serialHelper.periodic()
@@ -165,8 +165,9 @@ class RobotContainer:
             self._last_detection_time = now
         elif now - self._last_detection_time > self.DETECTION_TIMEOUT:
             if not isinstance(self.drivetrain.command, Search):
-                self.drivetrain.set_command(self.search_command)
-                print("Switching to Search command (vision timeout).")
+                #self.drivetrain.set_command(self.search_command)
+                #print("Switching to Search command (vision timeout).")
+                pass
 
         # Mark the vision frame as processed
         self.vision.frame_done = False

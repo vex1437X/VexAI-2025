@@ -99,8 +99,9 @@ class Vision(Subsystem):
     returning tracked object IDs with their X and Z coordinates, consistent with
     the original Vision subsystem.
     """
-    def __init__(self, configPath='best.json', model_name='best_openvino_2022.1_6shave.blob', serialHelper=None, output_depth=False):
-        super().__init__(serialHelper)
+    def __init__(self, configPath='best.json', model_name='best_openvino_2022.1_6shave.blob', output_depth=False):
+        self.command = None
+        
         self.config_path = Path(configPath)
         self.model_name = model_name
         self.pipeline = None
