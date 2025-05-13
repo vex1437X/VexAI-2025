@@ -46,9 +46,7 @@ class Teleop(Command):
             rotation = self.apply_deadzone(self.joystick.get_axis(3))
 
             # Convert joystick x and y into global x and y based on heading
-            heading = (
-                self.motor_controller.get_heading()
-            )  # Assuming heading is in radians
+            heading = self.motor_controller.get_gyro()  # Assuming heading is in radians
             global_x = x * cos(heading) - y * sin(heading)
             global_y = x * sin(heading) + y * cos(heading)
 
