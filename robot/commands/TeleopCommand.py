@@ -71,7 +71,7 @@ class Teleop(Command):
             # Set motor speeds
             self.motor_controller.set_speed(
                 Instruction.DRIVE_SET,
-                [fl, fr, bl, br],
+                [fl, -fr, bl, -br],
             )
             print(str(fl) + ", " + str(fr))
 
