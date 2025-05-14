@@ -24,6 +24,7 @@ class SerialHelper:
         serial_port: str = "/dev/ttyACM1",
         baud_rate: int = 9600,
         timeout: float = 0.01,
+        # timeout: float = 0.2 # TODO: first thing to try is swapping this line for the previous
     ):
         self.ser = serial.Serial(serial_port, baud_rate, timeout=timeout)
         self.rx_buffer = bytearray()
@@ -91,10 +92,12 @@ class SerialHelper:
             idx += 1
             tag = DataTag(tag_val) if tag_val in (t.value for t in DataTag) else None
             if tag is None:
+                print(f"ERROR: Invalid tag {tag_val}\n\t{idx=}, {length=}")
                 break
 
             # Ensure there are enough bytes for a double value
             if idx + 8 > length:
+                print(f"ERORR: Not enough bytes in packet for our double\n\t{idx=}, {length=}")
                 break
 
             # Read the double value
@@ -136,8 +139,11 @@ class SerialHelper:
                                 escaped_data.append(self.END)
                             elif escaped_code == 0x02:
                                 escaped_data.append(self.ESCAPE)
+                            else:
+                                print(f"ERROR: Inavalid excape code {escaped_code!a:02X}")
                             j += 2
                         else:
+                            print(f"ERROR: ESCAPE CODE")
                             j += 1
                         continue
                     else:
@@ -149,7 +155,7 @@ class SerialHelper:
                     packet_dict = self.decode_vex_data_packet(escaped_data)
                     packets_found.append(packet_dict)
                     i += i_advance
-                else:
+                else: # not a full packet. break out and wait for next call
                     break
             else:
                 i += 1
