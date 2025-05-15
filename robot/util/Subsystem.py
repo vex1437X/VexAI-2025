@@ -19,24 +19,25 @@ class Subsystem:
             self.command.execute()
             if self.command.is_finished():
                 self.command.end(False)
-                #if isinstance(self.command, Search):
-                    #print("Search finished lets go turn!")
-                    #self.set_command(
-                        #TurnDrive(
-                         #   serialHelper=self.serialHelper,
-                          #  vision=self.command.vision,
-                        #)
-                    #)
-                #elif isinstance(self.command, TurnDrive):
-                 #   print("TurnDrive finished lets go search!")
-                  #  self.set_command(
-                   #     Search(
-                    #        serialHelper=self.serialHelper,
-                     #       vision=self.command.vision,
-                      #  )
-                    #)
-               # else:
-                self.command = None
+                if isinstance(self.command, Search):
+                    print("Search finished lets go turn!")
+                    self.set_command(
+                        TurnDrive(
+                            motor_controller=self.motor_controller,
+                            vision=self.command.vision,
+                        )
+                    )
+                elif isinstance(self.command, TurnDrive):
+                    print("TurnDrive finished lets go search!")
+                    self.set_command(
+                        Search(
+                            motor_controller=self.motor_controller,
+                            vision=self.command.vision,
+                            turn_speed=35,
+                        )
+                    )
+                else:
+                    self.command = None
 
     def set_command(self, command):
         """

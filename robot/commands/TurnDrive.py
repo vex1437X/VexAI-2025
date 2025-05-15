@@ -120,7 +120,7 @@ class TurnDrive(Command):
         else:
             turn_speed = self.turn_pid(delta_angle)
             # print(f"Calculated turn speed: {turn_speed}")
-            self._set_motor_speeds(-turn_speed, turn_speed)
+            self._set_motor_speeds(turn_speed, -turn_speed)
 
     def _handle_driving(self, z_offset):
         if self.drive_finished:
@@ -135,13 +135,13 @@ class TurnDrive(Command):
 
         # drive more when vision lost (TODO: stop when color sensor senses ring)
         print(f"Z offset: {abs(z_offset)}")
-        if abs(z_offset) < 0.5:
+        if abs(z_offset) < 0.35:
             # print("Z offset within threshold. Driving finished.")
             if not hasattr(self, "_drive_start_time"):
                 self._drive_start_time = time.time()
                 self.tof_finished = True
         else:
-            self._set_motor_speeds(-drive_speed, -drive_speed)
+            self._set_motor_speeds(drive_speed, drive_speed)
 
     def _stop_motors(self):
         self._set_motor_speeds(0, 0)

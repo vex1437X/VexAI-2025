@@ -200,5 +200,5 @@ class PoseEstimator:
         if gps2_reading is not None:
             self.update_gps(1, gps2_reading)
 
-        print(f"Pose: " f"{self.get_state()[0]}")
+        #print(f"Pose: " f"{self.get_state()[0]}")
         return self.get_state()
