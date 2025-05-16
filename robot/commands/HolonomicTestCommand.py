@@ -11,12 +11,8 @@ class HolonomicTestCommand(Command):
 
     def __init__(self, motor_controller: MotorController):
         self.mc = motor_controller
-
-    def execute(self):
-        """
-        Execute the command to test the holonomic drive system.
-        """
-        # Example logic for testing the holonomic drive
+        
+    def start(self):
         self.mc.drive_holomonic(1, 0, 0, 50.0)
         time.sleep(1)
         self.mc.set_speed(Instruction.DRIVE_SET, [0, 0, 0, 0])
@@ -31,3 +27,17 @@ class HolonomicTestCommand(Command):
         time.sleep(1)
         self.mc.set_speed(Instruction.DRIVE_SET, [0, 0, 0, 0])
         time.sleep(2)
+
+    def is_finished(self):
+        return False
+        
+    def end(self):
+        pass
+        
+
+    def execute(self):
+        """
+        Execute the command to test the holonomic drive system.
+        """
+        # Example logic for testing the holonomic drive
+        pass

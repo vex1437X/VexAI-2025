@@ -13,12 +13,13 @@ from robot.util.Constants import DataTag
 from robot.PoseEstimator import PoseEstimator
 from robot.util.Controller import Controller
 from robot.util.MotorController import MotorController
+from robot.commands.HolonomicTestCommand import HolonomicTestCommand
 
 
 class RobotContainer:
     # Configuration constants for the robot
     SERIAL_PORT = "/dev/ttyACM1"
-    BAUD_RATE = 9600
+    BAUD_RATE = 115200
     MAX_SPEED = 100
     DETECTION_TIMEOUT = 1  # Timeout for vision detection in milliseconds
 
@@ -82,9 +83,10 @@ class RobotContainer:
         self.teleop_command = Teleop(
             self.joystick, self.MAX_SPEED, "holonomic", self.motor_controller
         )
+        self.testCMD = HolonomicTestCommand(self.motor_controller)
 
         # Set the default command for the drivetrain
-        self.drivetrain.set_command(self.teleop_command)
+        self.drivetrain.set_command(self.search_command)
 
     def _init_joystick(self):
         # Initialize the joystick hardware

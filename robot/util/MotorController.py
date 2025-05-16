@@ -26,12 +26,14 @@ class MotorController:
         Drive the robot in a holonomic manner using mecanum wheels.
         """
         vxf = -vx
+        vyf = -vy
+        of = -omega
         # Mecanum inverse kinematics (robot‑centric)
         # Reference: https://www.chiefdelphi.com/uploads/short-url/bsbgWq9Rgl9Q0IvqpuXzYjPtwic.pdf
-        fl = vy + vxf + omega  # Front Left
-        fr = vy - vxf - omega  # Front Right
-        bl = vy - vxf + omega  # Back Left
-        br = vy + vxf - omega  # Back Right
+        fl = vxf + vyf + of  # Front Left
+        fr = vxf - vyf - of  # Front Right
+        bl = vxf - vyf + of  # Back Left
+        br = vxf + vyf - of  # Back Right
         wheel = [fl, fr, bl, br]  # FL, FR, RL, RR
 
         # Scale so that |wheel| ≤ max_speed
@@ -43,6 +45,7 @@ class MotorController:
         # Send to motor controller
         self.set_speed(Instruction.DRIVE_SET, wheel)
         print(f"{vx}, {vy}, {omega}")
+        #print(wheel)
 
     def stop(self):
         """

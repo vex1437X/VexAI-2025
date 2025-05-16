@@ -52,6 +52,6 @@ class Subsystem:
         elif self.command:
             # print(f"Command {self.command} is finished. Ending it.")
             self.command.end(False)
-        # print(f"Setting new command: {command}")
+        print(f"Setting new command: {command}")
         command.start()
         self.command = command
