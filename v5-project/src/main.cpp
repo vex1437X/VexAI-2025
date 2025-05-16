@@ -8,7 +8,7 @@
 // --------------------- VEX Setup ---------------------
 using namespace vex;
 vex::brain Brain;
-vex::motor intake(PORT2); // TODO: intake doesn't exist
+vex::motor intake(PORT7); // TODO: intake doesn't exist
 vex::motor scoring(PORT11);
 vex::motor clamp(PORT16);
 vex::motor rightFront(PORT18);
@@ -54,6 +54,28 @@ enum class DataTag : uint8_t {
     RL = 0x0D,
     RR = 0x0E,
   };
+
+  // Clamp Logic
+void zeroClamp() {
+    // Spin CW until velocity is < 5% for 0.5s
+    clamp.setVelocity(100, percent);
+    clamp.spin(forward);
+    while (clamp.velocity(percentUnits::pct) > 5) {
+        vex::this_thread::sleep_for(20);
+    }
+    clamp.stop();
+    clamp.setPosition(0, degrees);
+}
+
+void engageClamp() {
+    // Spin CCW until velocity is < 5% and encoder is greaten than threshold (if vel = 0 before encoder then zero instead)
+    clamp.setVelocity(100, percent);
+    clamp.spin(reverse);
+    while (clamp.velocity(percentUnits::pct) > 5) {
+        vex::this_thread::sleep_for(20);
+    }
+
+}
 
 // --------------------- Handling Pi→VEX --------------------
 void setDrive(double vel1, double vel2, double vel3, double vel4) {
@@ -237,6 +259,12 @@ int sensorTask() {                     // ← renamed – launch this one below
         vex::this_thread::sleep_for(20);
     }
 
+    // Zero the clamp then engage after 2 seconds
+    zeroClamp();
+    vex::this_thread::sleep_for(2000);
+    engageClamp();
+    vex::this_thread::sleep_for(2000);
+
     while (true) {
         /* ---------- GPS ---------- */
         double xPos0 = gpsSensorLeft.xPosition(distanceUnits::mm) * 1000;
@@ -290,10 +318,17 @@ int main() {
     char byte;
     bool readingMessage = false;
 
+    rightFront.setBrake(brakeType::hold);
+    rightBack.setBrake(brakeType::hold);
+    leftFront.setBrake(brakeType::hold);
+    leftBack.setBrake(brakeType::hold);
+
     // Main loop to decode Pi→VEX commands
     while (true) {
         intake.setVelocity(100, percent);
         intake.spin(forward);
+        scoring.setVelocity(100, percent);
+        scoring.spin(forward);
         // If there's a byte available from Pi->VEX, read it
         if (std::cin.read(&byte, 1)) {
             uint8_t currentByte = static_cast<uint8_t>(byte);
