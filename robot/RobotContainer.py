@@ -57,7 +57,7 @@ class RobotContainer:
 
         # Initialize commands for different robot behaviors
         self.turn_command = TurnDrive(
-            self.MAX_SPEED, self.motor_controller, self.vision
+            max_speed=self.MAX_SPEED, motor_controller=self.motor_controller, vision=self.vision
         )
         self.search_command = Search(self.motor_controller, self.vision, turn_speed=35)
         self.teleop_command = Teleop(
@@ -162,7 +162,7 @@ class RobotContainer:
         # Automatically switch to search command if no vision targets are detected
         frame = self.vision.process_frame()
         now = time.time()
-        print(now-self._last_detection_time)
+        #print(now-self._last_detection_time)
         if frame:
             self._last_detection_time = now
         elif now - self._last_detection_time > self.DETECTION_TIMEOUT:

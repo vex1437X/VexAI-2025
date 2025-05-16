@@ -26,8 +26,8 @@ class TurnDrive(Command):
         *,
         max_speed: float = 50,  # percent‑output cap (‑100 … 100)
         kx: float = 0.6,  # strafe gain  (m/s per m)
-        kz: float = 0.6,  # forward gain (m/s per m)
-        k_theta: float = 3.0,  # rotation gain (rad/s per rad)
+        kz: float = 1.0,  # forward gain (m/s per m)
+        k_theta: float = 1.5,  # rotation gain (rad/s per rad)
         distance_full_heading: float = 1.0,  # m at which we still spin freely
         pos_tol: float = 0.35,  # m       – consider position settled
         theta_tol: float = math.radians(3),  # rad – consider heading settled
@@ -144,25 +144,25 @@ class TurnDrive(Command):
             # Vision error – treat as no detection for this frame
             return None
 
-    def _drive_cartesian(self, vx, vy, omega):
+    def _drive_cartesian(self, vxi, vy, omega):
+        vx=-vxi
         # Mecanum inverse kinematics (robot‑centric)
         # Reference: https://www.chiefdelphi.com/uploads/short-url/bsbgWq9Rgl9Q0IvqpuXzYjPtwic.pdf
-        L = self.L
-        W = self.W
-        a = vx - omega * (L / 2)
-        b = vx + omega * (L / 2)
-        c = vy - omega * (W / 2)
-        d = vy + omega * (W / 2)
-        wheel = [b + d, b - c, a - d, a + c]  # FL, FR, RL, RR
+        fl = (vy + vx + omega) # Front Left
+        fr = (vy - vx - omega) # Front Right
+        bl = (vy - vx + omega) # Back Left
+        br = (vy + vx - omega) # Back Right
+        wheel = [fl, fr, bl, br]  # FL, FR, RL, RR
 
         # Scale so that |wheel| ≤ max_speed
         max_mag = max(abs(w) for w in wheel)
-        if max_mag > self.max_speed:
-            scale = self.max_speed / max_mag
-            wheel = [w * scale for w in wheel]
+        max_mag = max(max_mag, 1e-6)
+        scale = self.max_speed / max_mag
+        wheel = [w * scale for w in wheel]
 
         # Send to motor controller
         self.mc.set_speed(Instruction.DRIVE_SET, wheel)
+        print(f"{vx}, {vy}, {omega}")
 
     def _stop(self):
         self.mc.set_speed(Instruction.DRIVE_SET, [0, 0, 0, 0])
