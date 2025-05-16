@@ -3,95 +3,23 @@ import cv2
 import depthai as dai
 import numpy as np
 from scipy.spatial import distance as dist
+from typing import List, Optional, Dict, Tuple
 from pathlib import Path
 import blobconverter
 import argparse
 import json
 from robot.util.Subsystem import Subsystem  # Assuming Subsystem is in this relative path
 
-class CentroidTracker:
-    # ... (CentroidTracker class remains the same as before)
-    def __init__(self, max_disappeared=5):
-        self.next_object_id = 0
-        self.objects = dict()  # object_id -> centroid (spatial_x, spatial_z)
-        self.disappeared = dict()  # object_id -> consecutive missing count
-        self.max_disappeared = max_disappeared
+    
+class VisionDetection:
+    label: str
+    confidence: float
+    xmin: float
+    ymin: float
+    xmax: float
+    ymax: float
+    spatialCoordinates: Optional[dai.Point3f] = None
 
-    def register(self, centroid):
-        self.objects[self.next_object_id] = centroid
-        self.disappeared[self.next_object_id] = 0
-        self.next_object_id += 1
-
-    def deregister(self, object_id):
-        del self.objects[object_id]
-        del self.disappeared[object_id]
-
-    def update(self, detections, frame_width, frame_height):
-        # no detections → mark all existing as disappeared
-        if len(detections) == 0:
-            for oid in list(self.disappeared):
-                self.disappeared[oid] += 1
-                if self.disappeared[oid] > self.max_disappeared:
-                    self.deregister(oid)
-            return self.objects
-
-        # Extract centroids from detections
-        input_centroids = []
-        for detection in detections:
-            # Use the center of the bounding box and the spatial coordinates
-            cx = int((detection.xmin + detection.xmax) / 2 * frame_width)
-            cy = int((detection.ymin + detection.ymax) / 2 * frame_height)
-            sx = detection.spatialCoordinates.x / 1000  # Convert mm to meters
-            sz = detection.spatialCoordinates.z / 1000  # Convert mm to meters
-            input_centroids.append((cx, cy, sx, sz)) # Store cx, cy, spatial x, spatial z
-
-        # first frame or no existing tracks → register all
-        if len(self.objects) == 0:
-            for c in input_centroids:
-                # Register with spatial x and z
-                self.register((c[2], c[3]))
-            return self.objects
-
-        # otherwise match input centroids to existing ones
-        object_ids = list(self.objects.keys())
-        object_centroids_2d = [obj[:2] for obj in self.objects.values()] # Use only 2D for matching
-        input_centroids_2d = [c[:2] for c in input_centroids]
-
-        if not object_centroids_2d or not input_centroids_2d:
-            return self.objects  # Avoid errors if lists are empty
-
-        # Calculate distances based on 2D centroid (x, y)
-        D = dist.cdist(np.array(object_centroids_2d), np.array(input_centroids_2d))
-
-        rows = D.min(axis=1).argsort()
-        cols = D.argmin(axis=1)[rows]
-
-        used_rows, used_cols = set(), set()
-        updated_objects = {}
-        for r, c in zip(rows, cols):
-            if r in used_rows or c in used_cols:
-                continue
-            oid = object_ids[r]
-            # Update tracked object with the new spatial x and z
-            self.objects[oid] = (input_centroids[c][2], input_centroids[c][3])
-            self.disappeared[oid] = 0
-            updated_objects[oid] = (input_centroids[c][2], input_centroids[c][3])
-            used_rows.add(r)
-            used_cols.add(c)
-
-        # any unmatched existing → disappeared
-        for r in set(range(len(object_centroids_2d))) - used_rows:
-            oid = object_ids[r]
-            self.disappeared[oid] += 1
-            if self.disappeared[oid] > self.max_disappeared:
-                self.deregister(oid)
-
-        # any unmatched new centroids → register
-        for c in set(range(len(input_centroids_2d))) - used_cols:
-            # Register with spatial x and z
-            self.register((input_centroids[c][2], input_centroids[c][3]))
-
-        return self.objects
 
 class Vision(Subsystem):
     """
@@ -112,12 +40,11 @@ class Vision(Subsystem):
         self.metadata = {}
         self.labels = {}
         self.W, self.H = 416, 416  # Default input size
-        self.tracker = CentroidTracker(max_disappeared=5)
         self.frame_width = 0
         self.frame_height = 0
         self.output_depth = output_depth  # Flag to output depth (internal use)
         self.current_frame = None
-        self.current_detections = []
+        self.current_raw_detections = []
         self.current_depth_frame = None
         self._load_config()
         self._create_pipeline()
@@ -211,44 +138,108 @@ class Vision(Subsystem):
             self.pipeline = None
             self.device = None
 
-    def process_frame(self, label_name="Red-Ring"):
+    def get_raw_detections(self) -> List[VisionDetection]:
         if self.pipeline is None or self.device is None:
             print("DepthAI device not initialized.")
-            return {}
+            return []
+        
+        inDetections = self.detection_nn_queue.get()
+        if inDetections is not None:
+            detections = []
+            for detection in inDetections.detections:
+                label = self.labels[detection.label]
+                det = VisionDetection(
+                    label=label,
+                    confidence=detection.confidence,
+                    xmin=detection.xmin,
+                    ymin=detection.ymin,
+                    xmax=detection.xmax,
+                    ymax=detection.ymax,
+                    spatialCoordinates=detection.spatialCoordinates
+                )
+                detections.append(det)
+            return detections
+        return []
 
-        in_preview = self.preview_queue.get()
-        in_detections = self.detection_nn_queue.get()
-        self.current_frame = in_preview.getCvFrame()
 
-        for detection in in_detections.detections:
-            label = self.labels[detection.label]
-            if label == label_name:
-                self.current_detections.append(detection)
-            else:
-                pass
+    # def process_detections(self, label_name="Red-Ring"):
+    #     if self.pipeline is None or self.device is None:
+    #         print("DepthAI device not initialized.")
+    #         return {}
+
+    #     inPreview = self.preview_queue.get()
+    #     inDetections = self.detection_nn_queue.get()
+    #     inDepth = self.depth_queue.get()
+
+    #     self.frame = inPreview.getCvFrame()
+    #     self.depthFrame = inDepth.getCvFrame()
+        
+    #     self.height = self.frame.shape[0]
+    #     self.width = self.frame.shape[1]
+        
+    #     self.current_detections = []
+        
+
+    #     for detection in inDetections.detections:
+    #         label = self.labels[detection.label]
+    #         roiData = detection.boundingBoxMapping
+    #         roi = roiData.roi
+    #         roi = roi.denormalize(self.depthFrame.shape[1], self.depthFrame.shape[0])
+    #         topLeft = roi.topLeft()
+    #         bottomRight = roi.bottomRight()
+    #         xmin = int(topLeft.x)
+    #         ymin = int(topLeft.y)
+    #         xmax = int(bottomRight.x)
+    #         ymax = int(bottomRight.y)
+    #         cv2.rectangle(self.depthFrame, (xmin, ymin), (xmax, ymax), (255,0,0), 1)
+
+    #         # Denormalize bounding box
+    #         x1 = int(detection.xmin * self.width)
+    #         x2 = int(detection.xmax * self.width)
+    #         y1 = int(detection.ymin * self.height)
+    #         y2 = int(detection.ymax * self.height)
 
 
-        if self.output_depth and self.depth_queue is not None:
-            in_depth = self.depth_queue.get()
-            self.current_depth_frame = in_depth.getCvFrame()
-        else:
-            self.current_depth_frame = None
+    #         cv2.putText(self.frame, str(label), (x1 + 10, y1 + 20), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
+    #         cv2.putText(self.frame, "{:.2f}".format(detection.confidence*100), (x1 + 10, y1 + 35), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
+    #         cv2.putText(self.frame, f"X: {int(detection.spatialCoordinates.x)} mm", (x1 + 10, y1 + 50), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
+    #         cv2.putText(self.frame, f"Y: {int(detection.spatialCoordinates.y)} mm", (x1 + 10, y1 + 65), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
+    #         cv2.putText(self.frame, f"Z: {int(detection.spatialCoordinates.z)} mm", (x1 + 10, y1 + 80), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
 
-        self.frame_height, self.frame_width = self.current_frame.shape[:2]
-        tracked_objects = self.tracker.update(self.current_detections, self.frame_width, self.frame_height)
+    #         cv2.rectangle(self.frame, (x1, y1), (x2, y2), (255,0,0), cv2.FONT_HERSHEY_SIMPLEX)
 
-        # Prepare the output dictionary with tracked IDs and their X, Z coords
-        tracked_coords = {}
-        for obj_id, coords in tracked_objects.items():
-            tracked_coords[obj_id] = coords  # (spatial_x, spatial_z)
+    #     cv2.putText(self.frame, "NN fps: {:.2f}".format(fps), (2, self.frame.shape[0] - 4), cv2.FONT_HERSHEY_TRIPLEX, 0.4, (255,0,0))
+    #     cv2.imshow("rgb", self.frame)
 
-        return tracked_coords
+
+
+    #     if self.output_depth and self.depth_queue is not None:
+    #         in_depth = self.depth_queue.get()
+    #         self.current_depth_frame = in_depth.getCvFrame()
+    #     else:
+    #         self.current_depth_frame = None
+
+    #     self.frame_height, self.frame_width = self.current_frame.shape[:2]
+    #     tracked_objects = self.tracker.update(self.current_detections, self.frame_width, self.frame_height)
+
+
+    #     # Prepare the output dictionary with tracked IDs and their X, Z coords
+    #     tracked_coords = {}
+    #     for obj_id, coords in tracked_objects.items():
+    #         tracked_coords[obj_id] = coords  # (spatial_x, spatial_z)
+
+    #     return tracked_coords
 
     def get_frame(self):
         return self.current_frame
 
-    def get_detections(self):
-        return self.current_detections
+    def get_detections(self, label_filter: Optional[str] = None) -> List[VisionDetection]:
+        detections = self.get_raw_detections()
+        if label_filter:
+            return [det for det in detections if det.label == label_filter]
+        return detections
+    
+
 
     def get_depth_frame(self):
         return self.current_depth_frame
