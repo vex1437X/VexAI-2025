@@ -25,7 +25,7 @@ class TurnDrive(Command):
         vision,
         *,
         max_speed: float = 50,  # percent‑output cap (‑100 … 100)
-        kx: float = 0.6,  # strafe gain  (m/s per m)
+        kx: float = 1.5,  # strafe gain  (m/s per m)
         kz: float = 1.0,  # forward gain (m/s per m)
         k_theta: float = 1.5,  # rotation gain (rad/s per rad)
         distance_full_heading: float = 1.0,  # m at which we still spin freely
@@ -91,7 +91,7 @@ class TurnDrive(Command):
         weight = min(abs(z_off) / self.d0, 1.0)  # taper spin when close
         omega = self.pid_theta(delta_theta) * weight
 
-        self._drive_cartesian(vx, vy, omega)
+        self.mc.drive_holomonic(vx, vy, omega)
 
         # Finish criteria
         if (
@@ -138,26 +138,6 @@ class TurnDrive(Command):
         except Exception as exc:
             # If vision data is not available for some reason, treat as no target
             return None
-
-    def _drive_cartesian(self, vxi, vy, omega):
-        vx = -vxi
-        # Mecanum inverse kinematics (robot‑centric)
-        # Reference: https://www.chiefdelphi.com/uploads/short-url/bsbgWq9Rgl9Q0IvqpuXzYjPtwic.pdf
-        fl = vy + vx + omega  # Front Left
-        fr = vy - vx - omega  # Front Right
-        bl = vy - vx + omega  # Back Left
-        br = vy + vx - omega  # Back Right
-        wheel = [fl, fr, bl, br]  # FL, FR, RL, RR
-
-        # Scale so that |wheel| ≤ max_speed
-        max_mag = max(abs(w) for w in wheel)
-        max_mag = max(max_mag, 1e-6)
-        scale = self.max_speed / max_mag
-        wheel = [w * scale for w in wheel]
-
-        # Send to motor controller
-        self.mc.set_speed(Instruction.DRIVE_SET, wheel)
-        print(f"{vx}, {vy}, {omega}")
 
     def _stop(self):
         self.mc.set_speed(Instruction.DRIVE_SET, [0, 0, 0, 0])

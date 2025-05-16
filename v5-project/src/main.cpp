@@ -71,9 +71,8 @@ void engageClamp() {
     // Spin CCW until velocity is < 5% and encoder is greaten than threshold (if vel = 0 before encoder then zero instead)
     clamp.setVelocity(100, percent);
     clamp.spin(reverse);
-    while (clamp.velocity(percentUnits::pct) > 5) {
-        vex::this_thread::sleep_for(20);
-    }
+    vex::this_thread::sleep_for(500);
+    clamp.stop();
 
 }
 
@@ -253,6 +252,7 @@ std::vector<uint8_t> encodeDataPacket(const std::vector<std::pair<DataTag, doubl
 // 4) Task to periodically send the sensor data via the above packet structure
 int sensorTask() {                     // ← renamed – launch this one below
     // 2 s for GPS, then wait for inertial calibration
+    clamp.setBrake(brakeType::hold);
     engageClamp();
     inersense.calibrate();
     while (inersense.isCalibrating()) {
