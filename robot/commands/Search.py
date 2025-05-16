@@ -4,7 +4,7 @@ from robot.util.MotorController import MotorController
 
 
 class Search(Command):
-    def __init__(self, motor_controller : MotorController=None, vision=None, turn_speed=20):
+    def __init__(self, motor_controller : MotorController=None, vision=None, turn_speed=35):
         self.motor_controller = motor_controller
         self.turn_speed = turn_speed
         self.vision = vision

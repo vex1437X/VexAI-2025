@@ -11,7 +11,7 @@ class MotorController:
         """
         cmd = self._serial.encode_instruction(tag, speed)
         self._serial.send_command(cmd)
-        print(speed)
+        #print(speed)
 
     def stop(self):
         """

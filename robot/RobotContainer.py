@@ -1,5 +1,6 @@
 import pygame
 import numpy as np
+import time
 
 from robot.subsystems.Drivetrain import Drivetrain
 from robot.util.SerialHelper import SerialHelper
@@ -18,7 +19,7 @@ class RobotContainer:
     SERIAL_PORT = "/dev/ttyACM1"
     BAUD_RATE = 9600
     MAX_SPEED = 100
-    DETECTION_TIMEOUT = 1000  # Timeout for vision detection in milliseconds
+    DETECTION_TIMEOUT = 1  # Timeout for vision detection in milliseconds
 
     def __init__(self):
         # Initialize serial communication and motor controller
@@ -32,7 +33,7 @@ class RobotContainer:
 
         # Initialize subsystems and set the default drivetrain command
         self._init_subsystems()
-        self.drivetrain.set_command(self.teleop_command)
+        self.drivetrain.set_command(self.search_command)
 
         # Initialize button states and detection timing
         btn_count = self.joystick.get_numbuttons() if self.joystick else 0
@@ -51,14 +52,14 @@ class RobotContainer:
         # Initialize vision and drivetrain subsystems
         self.vision = Vision()
         self.drivetrain = Drivetrain(
-            self.joystick, self.MAX_SPEED, "holonomic", self.motor_controller
+            self.joystick, self.MAX_SPEED, "holonomic", self.motor_controller, self.vision
         )
 
         # Initialize commands for different robot behaviors
         self.turn_command = TurnDrive(
             self.MAX_SPEED, self.motor_controller, self.vision
         )
-        self.search_command = Search(self.motor_controller, self.vision, turn_speed=20)
+        self.search_command = Search(self.motor_controller, self.vision, turn_speed=35)
         self.teleop_command = Teleop(
             self.joystick, self.MAX_SPEED, "holonomic", self.motor_controller
         )
@@ -155,19 +156,23 @@ class RobotContainer:
         self.vision.tick()
 
         # Skip further processing if no joystick is connected
-        if not self.joystick:
-            return
+        #if not self.joystick:
+            #return
 
         # Automatically switch to search command if no vision targets are detected
         frame = self.vision.process_frame()
-        now = pygame.time.get_ticks()
+        now = time.time()
+        print(now-self._last_detection_time)
         if frame:
             self._last_detection_time = now
         elif now - self._last_detection_time > self.DETECTION_TIMEOUT:
             if not isinstance(self.drivetrain.command, Search):
-                #self.drivetrain.set_command(self.search_command)
-                #print("Switching to Search command (vision timeout).")
-                pass
+                self.drivetrain.set_command(self.search_command)
+                print("Switching to Search command (vision timeout).")
 
         # Mark the vision frame as processed
         self.vision.frame_done = False
+        
+        #goofy stuff
+        if self.drivetrain.command == None:
+                _schedule_search()
