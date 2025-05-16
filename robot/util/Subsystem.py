@@ -33,7 +33,7 @@ class Subsystem:
                         Search(
                             motor_controller=self.motor_controller,
                             vision=self.command.vision,
-                            turn_speed=35,
+                            turn_speed=20,
                         )
                     )
                 else:

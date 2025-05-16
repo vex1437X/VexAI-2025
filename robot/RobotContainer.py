@@ -79,7 +79,7 @@ class RobotContainer:
             motor_controller=self.motor_controller,
             vision=self.vision,
         )
-        self.search_command = Search(self.motor_controller, self.vision, turn_speed=35)
+        self.search_command = Search(self.motor_controller, self.vision, turn_speed=20)
         self.teleop_command = Teleop(
             self.joystick, self.MAX_SPEED, "holonomic", self.motor_controller
         )
