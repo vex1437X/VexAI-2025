@@ -4,7 +4,9 @@ from robot.util.MotorController import MotorController
 
 
 class Search(Command):
-    def __init__(self, motor_controller : MotorController=None, vision=None, turn_speed=35):
+    def __init__(
+        self, motor_controller: MotorController = None, vision=None, turn_speed=35
+    ):
         self.motor_controller = motor_controller
         self.turn_speed = turn_speed
         self.vision = vision
@@ -16,19 +18,17 @@ class Search(Command):
         # turn left until an object is detected, then end the command
         self.motor_controller.set_speed(
             Instruction.DRIVE_SET,
-            [-self.turn_speed, self.turn_speed, -self.turn_speed, self.turn_speed])
+            [-self.turn_speed, self.turn_speed, -self.turn_speed, self.turn_speed],
+        )
 
     def is_finished(self):
         # check if an object is detected
-        raw = self.vision.process_frame()
-        print(f"Search: {raw}")
-        if len(raw) == 0:
+        detections = self.vision.get_detections()
+        if detections is None:
             return False
-        return True
+        return len(detections) > 0
 
     def end(self, interrupted=False):
         # stop the motors
-        self.motor_controller.set_speed(
-            Instruction.DRIVE_SET, [0, 0, 0, 0]
-        )
+        self.motor_controller.set_speed(Instruction.DRIVE_SET, [0, 0, 0, 0])
         print("Search command ended.")

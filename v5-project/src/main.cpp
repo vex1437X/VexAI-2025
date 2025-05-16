@@ -253,17 +253,13 @@ std::vector<uint8_t> encodeDataPacket(const std::vector<std::pair<DataTag, doubl
 // 4) Task to periodically send the sensor data via the above packet structure
 int sensorTask() {                     // ← renamed – launch this one below
     // 2 s for GPS, then wait for inertial calibration
-    vex::this_thread::sleep_for(2000);
+    engageClamp();
     inersense.calibrate();
     while (inersense.isCalibrating()) {
         vex::this_thread::sleep_for(20);
     }
 
     // Zero the clamp then engage after 2 seconds
-    zeroClamp();
-    vex::this_thread::sleep_for(2000);
-    engageClamp();
-    vex::this_thread::sleep_for(2000);
 
     while (true) {
         /* ---------- GPS ---------- */

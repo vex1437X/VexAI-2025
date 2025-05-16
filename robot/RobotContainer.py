@@ -1,6 +1,7 @@
 import pygame
 import numpy as np
 import time
+import threading
 
 from robot.subsystems.Drivetrain import Drivetrain
 from robot.util.SerialHelper import SerialHelper
@@ -24,6 +25,13 @@ class RobotContainer:
     def __init__(self):
         # Initialize serial communication and motor controller
         self.serialHelper = SerialHelper(self.SERIAL_PORT, self.BAUD_RATE)
+
+        self._serial_thread_stop = (
+            False  # flag to signal thread (if needed to stop gracefully)
+        )
+        serial_thread = threading.Thread(target=self._serial_loop, daemon=True)
+        serial_thread.start()
+
         self.motor_controller = MotorController(self.serialHelper)
 
         # Initialize joystick and button bindings
@@ -51,13 +59,24 @@ class RobotContainer:
     def _init_subsystems(self):
         # Initialize vision and drivetrain subsystems
         self.vision = Vision()
+
+        self._vision_thread_stop = False
+        vision_thread = threading.Thread(target=self._vision_loop, daemon=True)
+        vision_thread.start()
+
         self.drivetrain = Drivetrain(
-            self.joystick, self.MAX_SPEED, "holonomic", self.motor_controller, self.vision
+            self.joystick,
+            self.MAX_SPEED,
+            "holonomic",
+            self.motor_controller,
+            self.vision,
         )
 
         # Initialize commands for different robot behaviors
         self.turn_command = TurnDrive(
-            max_speed=self.MAX_SPEED, motor_controller=self.motor_controller, vision=self.vision
+            max_speed=self.MAX_SPEED,
+            motor_controller=self.motor_controller,
+            vision=self.vision,
         )
         self.search_command = Search(self.motor_controller, self.vision, turn_speed=35)
         self.teleop_command = Teleop(
@@ -117,17 +136,31 @@ class RobotContainer:
             )
         return None
 
+    def _serial_loop(self):
+        while not self._serial_thread_stop:
+            self.serialHelper.periodic()  # read and update state (non-blocking ~10ms max)
+            # small sleep to avoid busy-waiting, roughly match loop timing
+            time.sleep(0.005)  # 5ms sleep for ~200Hz polling, adjust as needed
+
+    def _vision_loop(self):
+        while not self._vision_thread_stop:
+            # Get the latest frame and detection results
+            tracked_coords = (
+                self.vision.process_frame()
+            )  # returns dict of tracked object coords:contentReference[oaicite:15]{index=15}
+            # Optionally, you could store tracked_coords or set a flag here.
+            # In this design, vision.process_frame already updates internal state (current_frame, current_detections, tracker.objects).
+            # Small sleep or yield could be added to limit frame rate if needed:
+            # time.sleep(0.001)
+
     def periodic(self):
         # Perform periodic updates for the robot's operation
 
         # Delay for a fixed time and process joystick events
         pygame.time.delay(20)
         pygame.event.pump()
-        #for evt in pygame.event.get():
+        # for evt in pygame.event.get():
         #    self.controller.handle_event(evt)
-
-        # Update serial communication
-        self.serialHelper.periodic()
 
         # Retrieve wheel velocities from sensors
         wheel_v = np.array(
@@ -155,24 +188,16 @@ class RobotContainer:
         self.drivetrain.tick()
         self.vision.tick()
 
-        # Skip further processing if no joystick is connected
-        #if not self.joystick:
-            #return
-
-        # Automatically switch to search command if no vision targets are detected
-        frame = self.vision.process_frame()
         now = time.time()
-        #print(now-self._last_detection_time)
-        if frame:
+        if len(self.vision.tracker.objects) > 0:
+            # At least one object is currently being tracked (detection ongoing)
             self._last_detection_time = now
         elif now - self._last_detection_time > self.DETECTION_TIMEOUT:
+            # No detections for a timeout period – switch to search mode if not already searching
             if not isinstance(self.drivetrain.command, Search):
                 self.drivetrain.set_command(self.search_command)
                 print("Switching to Search command (vision timeout).")
 
-        # Mark the vision frame as processed
-        self.vision.frame_done = False
-        
-        #goofy stuff
+        # goofy stuff
         if self.drivetrain.command == None:
-                _schedule_search()
+            self._schedule_search()

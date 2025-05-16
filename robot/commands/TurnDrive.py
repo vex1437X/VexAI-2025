@@ -33,7 +33,7 @@ class TurnDrive(Command):
         theta_tol: float = math.radians(3),  # rad – consider heading settled
         settle_time: float = 0.20,  # s both tolerances must hold
         wheelbase: float = 0.30,  # m front–back distance between wheels
-        track_width: float = 0.30  # m left–right distance between wheels
+        track_width: float = 0.30,  # m left–right distance between wheels
     ) -> None:
         super().__init__()
         self.mc = motor_controller
@@ -120,38 +120,33 @@ class TurnDrive(Command):
     # Helper methods
     # ------------------------------------------------------------------
     def _get_offsets(self):
-        """Safely query vision and return (x, z) or None."""
+        # Instead of grabbing a new frame, use the latest tracked coordinates
         try:
-            raw = self.vision.process_frame()
-            if raw is None:
+            # Get all current target coordinates (spatial x,z) from the vision tracker
+            tracked = list(self.vision.tracker.objects.values())  # list of (x,z) tuples
+            if not tracked:
                 return None
-            if isinstance(raw, dict):
-                candidates = list(raw.values())
-            else:
-                candidates = raw
+            # Find the closest object by Euclidean distance
             best = None
             best_dist = float("inf")
-            for offs in candidates:
-                if offs is None or len(offs) < 2:
-                    continue
-                x, z = offs[:2]
+            for x, z in tracked:
                 d = math.hypot(x, z)
                 if d < best_dist:
                     best_dist = d
                     best = (x, z)
             return best
         except Exception as exc:
-            # Vision error – treat as no detection for this frame
+            # If vision data is not available for some reason, treat as no target
             return None
 
     def _drive_cartesian(self, vxi, vy, omega):
-        vx=-vxi
+        vx = -vxi
         # Mecanum inverse kinematics (robot‑centric)
         # Reference: https://www.chiefdelphi.com/uploads/short-url/bsbgWq9Rgl9Q0IvqpuXzYjPtwic.pdf
-        fl = (vy + vx + omega) # Front Left
-        fr = (vy - vx - omega) # Front Right
-        bl = (vy - vx + omega) # Back Left
-        br = (vy + vx - omega) # Back Right
+        fl = vy + vx + omega  # Front Left
+        fr = vy - vx - omega  # Front Right
+        bl = vy - vx + omega  # Back Left
+        br = vy + vx - omega  # Back Right
         wheel = [fl, fr, bl, br]  # FL, FR, RL, RR
 
         # Scale so that |wheel| ≤ max_speed
