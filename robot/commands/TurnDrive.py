@@ -1,169 +1,168 @@
 from robot.util.Command import Command
 import math
+import time
 from simple_pid import PID
 from robot.util.Constants import Instruction
-import math
-import time
 from robot.util.MotorController import MotorController
 
 
 class TurnDrive(Command):
-    """
-    Command to turn and drive the robot toward a target detected by the Vision subsystem.
+    """Holonomic (mecanum / swerve) command that simultaneously translates and
+    rotates the robot toward a vision‑tracked target.
+
+    The vision system must provide *robot‑centric* offsets:
+        x  – metres right (+) / left (‑)
+        z  – metres forward (+) / backward (‑)
+
+    The controller converts those errors into the desired chassis twist
+    (vx, vy, ω) each cycle and feeds them straight into the drivetrain’s
+    inverse kinematics.  No turn‑then‑drive sequencing is required.
     """
 
-    def __init__(self, max_speed=50, motor_controller : MotorController=None, vision=None):
-        """
-        Initialize the TurnDrive command.
-
-        Args:
-            max_speed (float): Maximum speed for turning and driving.
-            motor_controller (MotorController): MotorController for sending commands to the robot.
-            vision (Vision): Vision subsystem for detecting the target.
-        """
-        self.motor_controller = motor_controller
+    def __init__(
+        self,
+        motor_controller: MotorController,
+        vision,
+        *,
+        max_speed: float = 50,  # percent‑output cap (‑100 … 100)
+        kx: float = 0.6,  # strafe gain  (m/s per m)
+        kz: float = 0.6,  # forward gain (m/s per m)
+        k_theta: float = 3.0,  # rotation gain (rad/s per rad)
+        distance_full_heading: float = 1.0,  # m at which we still spin freely
+        pos_tol: float = 0.35,  # m       – consider position settled
+        theta_tol: float = math.radians(3),  # rad – consider heading settled
+        settle_time: float = 0.20,  # s both tolerances must hold
+        wheelbase: float = 0.30,  # m front–back distance between wheels
+        track_width: float = 0.30  # m left–right distance between wheels
+    ) -> None:
+        super().__init__()
+        self.mc = motor_controller
         self.vision = vision
         self.max_speed = max_speed
 
-        # PID controllers for turning and driving
-        self.turn_pid = PID(0.5, 0, 0, setpoint=0)
-        self.turn_pid.output_limits = (-self.max_speed, self.max_speed)
-
-        self.drive_pid = PID(100, 0.1, 0.05, setpoint=0)
-        self.drive_pid.output_limits = (-self.max_speed, self.max_speed)
-
-        # Flags to track completion of turning and driving
-        self.turn_finished = False
-        self.drive_finished = False
-        self.tof_finished = False
-        # print("TurnDrive initialized.")
-        
-        self.ring_lost_time = 0
-        self.start_time = time.time()
-
-    def execute(self):
-        """
-        Execute the TurnDrive command. This method is called periodically.
-        """
-
-        offsets = None
-
-        if hasattr(self, "_drive_start_time"):
-            print(f"Drive start time: {time.time() - self._drive_start_time}")
-            if time.time() - self._drive_start_time >= 0.5:
-                self.drive_finished = True
-        
-        if self.tof_finished == False:
-            try:
-                raw = self.vision.process_frame()
-
-                # normalize into a flat list of (x,z) tuples
-                if raw is None:
-                    self.ring_lost = time.time()
-                    candidates = []
-                elif isinstance(raw, dict):
-                    candidates = list(raw.values())
-                else:
-                    candidates = raw
-
-                # find the nearest ring
-                best_offset = None
-                best_dist = float("inf")
-                for offs in candidates:
-                    # offs might be None or malformed
-                    if not offs or len(offs) < 2:
-                        continue
-                    x_off, z_off = offs
-                    d = math.hypot(x_off, z_off)
-                    if d < best_dist:
-                        best_dist = d
-                        best_offset = (x_off, z_off)
-
-                offsets = best_offset
-                # print(f"Best offsets detected: {offsets}")
-
-            except Exception as e:
-                # if anything goes wrong, treat as “no detection”
-                # print(f"Vision error in execute(): {e}")
-                offsets = None
-
-        # ensure we have a pair
-        if not offsets:
-            x_offset, z_offset = None, None
-        else:
-            x_offset, z_offset = offsets
-
-        # only act if we actually saw something
-        if x_offset is not None and z_offset is not None:
-            self._handle_turning(x_offset, z_offset)
-            self._handle_driving(z_offset)
-
-        # check for completion
-        if self.turn_finished and self.drive_finished:
-            self._stop_motors()
-            self.end(False)
-            
-        if self.ring_lost_time - self.start_time > 0.5:
-            self.end(False)
-
-    def _handle_turning(self, x_offset, z_offset):
-        if self.turn_finished:
-            # print("Turning already finished.")
-            return
-
-        delta_angle = math.degrees(math.atan2(x_offset, z_offset))
-        # print(f"Delta angle for turning: {delta_angle}")
-
-        if abs(delta_angle) < 1:
-            # print("Delta angle within threshold. Turning finished.")
-            self.turn_finished = True
-        else:
-            turn_speed = self.turn_pid(delta_angle)
-            # print(f"Calculated turn speed: {turn_speed}")
-            self._set_motor_speeds(turn_speed, -turn_speed)
-
-    def _handle_driving(self, z_offset):
-        if self.drive_finished:
-            # print("Driving already finished.")
-            return
-        if not self.turn_finished:
-            # print("Turning not finished. Skipping driving.")
-            return
-
-        drive_speed = self.drive_pid(z_offset)
-        # print(f"Calculated drive speed: {drive_speed}")
-
-        # drive more when vision lost (TODO: stop when color sensor senses ring)
-        print(f"Z offset: {abs(z_offset)}")
-        if abs(z_offset) < 0.35:
-            # print("Z offset within threshold. Driving finished.")
-            if not hasattr(self, "_drive_start_time"):
-                self._drive_start_time = time.time()
-                self.tof_finished = True
-        else:
-            self._set_motor_speeds(drive_speed, drive_speed)
-
-    def _stop_motors(self):
-        self._set_motor_speeds(0, 0)
-
-    def _set_motor_speeds(self, left_speed, right_speed):
-        self.motor_controller.set_speed(
-            Instruction.DRIVE_SET, [left_speed, right_speed, left_speed, right_speed]
+        # Simple P‑only PID objects for optional integral/derivative later
+        self.pid_x = PID(kx, 0, 0, setpoint=0, output_limits=(-max_speed, max_speed))
+        self.pid_z = PID(kz, 0, 0, setpoint=0, output_limits=(-max_speed, max_speed))
+        self.pid_theta = PID(
+            k_theta, 0, 0, setpoint=0, output_limits=(-max_speed, max_speed)
         )
 
+        self.d0 = distance_full_heading
+        self.pos_tol = pos_tol
+        self.theta_tol = theta_tol
+        self.settle_time = settle_time
+        self._within_tol_since = None
+
+        # kinematics constants
+        self.L = wheelbase
+        self.W = track_width
+
+        # watchdog for vision loss
+        self._last_seen = time.time()
+        self._vision_timeout = 0.5  # s
+
+    # ---------------------------------------------------------------------
+    # Framework lifecycle hooks
+    # ---------------------------------------------------------------------
     def start(self):
-        self.turn_finished = False
-        self.drive_finished = False
-        self.tof_finished = False
+        self._within_tol_since = None
+        self.pid_x.reset()
+        self.pid_z.reset()
+        self.pid_theta.reset()
+        self._stop()
 
-    def end(self, interrupted=False):
-        self._stop_motors()
-        self.turn_pid.reset()
-        self.drive_pid.reset()
-        print("TurnDrive command ended.")
-        if hasattr(self, "_drive_start_time"):
-            del self._drive_start_time
+    def execute(self):
+        offsets = self._get_offsets()
+        if offsets is None:
+            # vision lost; stop if lost too long
+            if time.time() - self._last_seen > self._vision_timeout:
+                self._stop()
+            return
 
-    def is_finished(self):
-        # print(f"Finished? {self.turn_finished} {self.drive_finished} ")
-        return self.turn_finished and self.drive_finished
+        x_off, z_off = offsets
+        self._last_seen = time.time()
+
+        # Translation commands (robot frame):
+        vx = self.pid_x(x_off)  # strafe: + right, – left
+        vy = self.pid_z(z_off)  # forward: + forward, – backward
+
+        # Heading error (face the target)
+        delta_theta = math.atan2(x_off, z_off)
+        weight = min(abs(z_off) / self.d0, 1.0)  # taper spin when close
+        omega = self.pid_theta(delta_theta) * weight
+
+        self._drive_cartesian(vx, vy, omega)
+
+        # Finish criteria
+        if (
+            abs(x_off) < self.pos_tol
+            and abs(z_off) < self.pos_tol
+            and abs(delta_theta) < self.theta_tol
+        ):
+            if self._within_tol_since is None:
+                self._within_tol_since = time.time()
+            elif time.time() - self._within_tol_since >= self.settle_time:
+                self.finished = True
+        else:
+            self._within_tol_since = None
+
+    def is_finished(self) -> bool:
+        return getattr(self, "finished", False)
+
+    def end(self, interrupted: bool = False):
+        self._stop()
+        # Clean up for GC or next run
+        self.pid_x.reset()
+        self.pid_z.reset()
+        self.pid_theta.reset()
+
+    # ------------------------------------------------------------------
+    # Helper methods
+    # ------------------------------------------------------------------
+    def _get_offsets(self):
+        """Safely query vision and return (x, z) or None."""
+        try:
+            raw = self.vision.process_frame()
+            if raw is None:
+                return None
+            if isinstance(raw, dict):
+                candidates = list(raw.values())
+            else:
+                candidates = raw
+            best = None
+            best_dist = float("inf")
+            for offs in candidates:
+                if offs is None or len(offs) < 2:
+                    continue
+                x, z = offs[:2]
+                d = math.hypot(x, z)
+                if d < best_dist:
+                    best_dist = d
+                    best = (x, z)
+            return best
+        except Exception as exc:
+            # Vision error – treat as no detection for this frame
+            return None
+
+    def _drive_cartesian(self, vx, vy, omega):
+        # Mecanum inverse kinematics (robot‑centric)
+        # Reference: https://www.chiefdelphi.com/uploads/short-url/bsbgWq9Rgl9Q0IvqpuXzYjPtwic.pdf
+        L = self.L
+        W = self.W
+        a = vx - omega * (L / 2)
+        b = vx + omega * (L / 2)
+        c = vy - omega * (W / 2)
+        d = vy + omega * (W / 2)
+        wheel = [b + d, b - c, a - d, a + c]  # FL, FR, RL, RR
+
+        # Scale so that |wheel| ≤ max_speed
+        max_mag = max(abs(w) for w in wheel)
+        if max_mag > self.max_speed:
+            scale = self.max_speed / max_mag
+            wheel = [w * scale for w in wheel]
+
+        # Send to motor controller
+        self.mc.set_speed(Instruction.DRIVE_SET, wheel)
+
+    def _stop(self):
+        self.mc.set_speed(Instruction.DRIVE_SET, [0, 0, 0, 0])
