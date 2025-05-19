@@ -254,8 +254,8 @@ class Vision(Subsystem):
 
         for detection in in_detections.detections:
             label = self.labels[detection.label]
-            confidence = detection.confidence
-            if label == label_name and confidence > 0.5:
+            conf = detection.confidence
+            if label == label_name:
                 self.current_detections.append(detection)
             else:
                 pass

@@ -33,7 +33,7 @@ class Subsystem:
                         Search(
                             motor_controller=self.motor_controller,
                             vision=self.command.vision,
-                            turn_speed=35,
+                            turn_speed=20,
                         )
                     )
                 else:
@@ -52,6 +52,6 @@ class Subsystem:
         elif self.command:
             # print(f"Command {self.command} is finished. Ending it.")
             self.command.end(False)
-        # print(f"Setting new command: {command}")
+        print(f"Setting new command: {command}")
         command.start()
         self.command = command

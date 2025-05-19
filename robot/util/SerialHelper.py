@@ -23,7 +23,7 @@ class SerialHelper:
     def __init__(
         self,
         serial_port: str = "/dev/ttyACM1",
-        baud_rate: int = 9600,
+        baud_rate: int = 115200,
         timeout: float = 0.01,
     ):
         self.ser = serial.Serial(serial_port, baud_rate, timeout=timeout)
@@ -33,7 +33,7 @@ class SerialHelper:
 
     def send_command(self, command: bytes):
         # Send a command over the serial connection
-        # print(f"Sending command: {command}")
+        #print(f"Sending command: {command}")
         try:
             self.ser.write(command)
             self.ser.flush()

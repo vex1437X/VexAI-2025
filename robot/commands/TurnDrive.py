@@ -83,15 +83,15 @@ class TurnDrive(Command):
         self._last_seen = time.time()
 
         # Translation commands (robot frame):
-        vx = self.pid_x(x_off)  # strafe: + right, – left
-        vy = self.pid_z(z_off)  # forward: + forward, – backward
+        vx = self.pid_x(z_off)  # strafe: + right, – left
+        vy = self.pid_z(x_off)  # forward: + forward, – backward
 
         # Heading error (face the target)
         delta_theta = math.atan2(x_off, z_off)
         weight = min(abs(z_off) / self.d0, 1.0)  # taper spin when close
         omega = self.pid_theta(delta_theta) * weight
 
-        self.mc.drive_holomonic(vx, vy, omega)
+        self.mc.drive_holomonic(-vx, -vy, -omega, self.max_speed)
 
         # Finish criteria
         if (
