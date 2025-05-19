@@ -21,6 +21,10 @@ vex::gps gpsSensorLeft(PORT9);
 vex::gps gpsSensorRight(PORT8);
 vex::inertial inersense(PORT10);
 
+// Unbuffer cout?
+std::cout.setf(std::ios::unitbuf); // Flushes the output buffer after each insertion
+
+
 // --------------------- Enums -------------------------
 // These are the same "Special" bytes as Pi→VEX uses.
 static constexpr uint8_t START  = 0xAA;
