@@ -204,49 +204,31 @@ void handleDriveSet(const std::vector<double>& operands) {
 
 // 1) Build a double in big-endian form
 std::vector<uint8_t> buildDoubleBytes(double value) {
-    // Convert host double to big-endian bytes
     std::vector<uint8_t> raw(sizeof(double));
     std::memcpy(raw.data(), &value, sizeof(double));
-    // Our decode expects big-endian, so reverse it
-    std::reverse(raw.begin(), raw.end());
+    std::reverse(raw.begin(), raw.end());          // host→big‑endian
     return raw;
 }
 
 // 2) Escape special bytes (START, END, ESCAPE) so we don't break our packets
-void escapeAndAppend(std::vector<uint8_t>& packet, const std::vector<uint8_t>& data) {
+void escapeAndAppend(std::vector<uint8_t>& pkt,
+                     const std::vector<uint8_t>& data) {
     for (uint8_t b : data) {
-        if (b == START) {
-            packet.push_back(ESCAPE);
-            packet.push_back(0x00);
-        } else if (b == END) {
-            packet.push_back(ESCAPE);
-            packet.push_back(0x01);
-        } else if (b == ESCAPE) {
-            packet.push_back(ESCAPE);
-            packet.push_back(0x02);
-        } else {
-            packet.push_back(b);
-        }
+        if (b == START)      { pkt.push_back(ESCAPE); pkt.push_back(0x00); }
+        else if (b == END)   { pkt.push_back(ESCAPE); pkt.push_back(0x01); }
+        else if (b == ESCAPE){ pkt.push_back(ESCAPE); pkt.push_back(0x02); }
+        else                 { pkt.push_back(b); }
     }
 }
 
-// 3) Build a single packet with multiple (Tag, double-value) pairs
-//    e.g. encodeDataPacket({{DataTag::GPS_X, 123.45}, {DataTag::GPS_Y, 67.89}, ...})
-std::vector<uint8_t> encodeDataPacket(const std::vector<std::pair<DataTag, double>>& dataPairs) {
-    std::vector<uint8_t> packet;
-    packet.push_back(START);
-
-    // For each pair, add the tag, then the escaped double
-    for (auto& p : dataPairs) {
-        // Tag
-        packet.push_back(static_cast<uint8_t>(p.first));
-        // Double
-        auto doubleBytes = buildDoubleBytes(p.second);
-        escapeAndAppend(packet, doubleBytes);
-    }
-
-    packet.push_back(END);
-    return packet;
+std::vector<uint8_t> encodeTagValue(DataTag tag, double value) {
+    std::vector<uint8_t> pkt;
+    pkt.reserve(1 + 1 + 8 * 2 + 1);                // worst‑case escapes
+    pkt.push_back(START);                          // 0xAA
+    pkt.push_back(static_cast<uint8_t>(tag));      // “instruction” byte
+    escapeAndAppend(pkt, buildDoubleBytes(value)); // operand(s)
+    pkt.push_back(END);                            // 0xAB
+    return pkt;
 }
 
 // 4) Task to periodically send the sensor data via the above packet structure
@@ -280,24 +262,24 @@ int sensorTask() {                     // ← renamed – launch this one below
 
         /* ---------- Packet ---------- */
         std::vector<std::pair<DataTag, double>> data{
-            // { DataTag::GPS0_X,       xPos0     },
-            // { DataTag::GPS1_X,       xPos1       },
-            // { DataTag::GPS0_Y,       yPos0       },
-            // { DataTag::GPS1_Y,       yPos1       },
-            // { DataTag::GPS0_H, gpsSensorLeft.heading() },
-            // { DataTag::GPS1_H, gpsSensorRight.heading() },
+            { DataTag::GPS0_X,       xPos0     },
+            { DataTag::GPS1_X,       xPos1       },
+            { DataTag::GPS0_Y,       yPos0       },
+            { DataTag::GPS1_Y,       yPos1       },
+            { DataTag::GPS0_H, gpsSensorLeft.heading() },
+            { DataTag::GPS1_H, gpsSensorRight.heading() },
 
             { DataTag::GYRO,         gheading        },
 
-            // { DataTag::FL,          FL           },
-            // { DataTag::FR,          FR           },
-            // { DataTag::RL,          RL           },
-            // { DataTag::RR,          RR           }
+            { DataTag::FL,          FL           },
+            { DataTag::FR,          FR           },
+            { DataTag::RL,          RL           },
+            { DataTag::RR,          RR           }
         };
 
-        auto packet = encodeDataPacket(data);
+        auto packet = encodeTagValue(data);
         std::cout.write(reinterpret_cast<const char*>(packet.data()), packet.size());
-        std::cout.flush();          // <‑‑ optional
+        std::cout.flush();
 
         vex::this_thread::sleep_for(20);   // 50 Hz
     }

@@ -25,7 +25,7 @@ class TurnDrive(Command):
         vision,
         *,
         max_speed: float = 50,  # percent‑output cap (‑100 … 100)
-        kx: float = 1.5,  # strafe gain  (m/s per m)
+        kx: float = 0.6,  # strafe gain  (m/s per m)
         kz: float = 1.0,  # forward gain (m/s per m)
         k_theta: float = 1.5,  # rotation gain (rad/s per rad)
         distance_full_heading: float = 1.0,  # m at which we still spin freely

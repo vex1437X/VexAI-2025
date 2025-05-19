@@ -1,4 +1,3 @@
-
 import cv2
 import depthai as dai
 import numpy as np
@@ -7,7 +6,10 @@ from pathlib import Path
 import blobconverter
 import argparse
 import json
-from robot.util.Subsystem import Subsystem  # Assuming Subsystem is in this relative path
+from robot.util.Subsystem import (
+    Subsystem,
+)  # Assuming Subsystem is in this relative path
+
 
 class CentroidTracker:
     # ... (CentroidTracker class remains the same as before)
@@ -43,7 +45,9 @@ class CentroidTracker:
             cy = int((detection.ymin + detection.ymax) / 2 * frame_height)
             sx = detection.spatialCoordinates.x / 1000  # Convert mm to meters
             sz = detection.spatialCoordinates.z / 1000  # Convert mm to meters
-            input_centroids.append((cx, cy, sx, sz)) # Store cx, cy, spatial x, spatial z
+            input_centroids.append(
+                (cx, cy, sx, sz)
+            )  # Store cx, cy, spatial x, spatial z
 
         # first frame or no existing tracks → register all
         if len(self.objects) == 0:
@@ -54,7 +58,9 @@ class CentroidTracker:
 
         # otherwise match input centroids to existing ones
         object_ids = list(self.objects.keys())
-        object_centroids_2d = [obj[:2] for obj in self.objects.values()] # Use only 2D for matching
+        object_centroids_2d = [
+            obj[:2] for obj in self.objects.values()
+        ]  # Use only 2D for matching
         input_centroids_2d = [c[:2] for c in input_centroids]
 
         if not object_centroids_2d or not input_centroids_2d:
@@ -93,15 +99,22 @@ class CentroidTracker:
 
         return self.objects
 
+
 class Vision(Subsystem):
     """
     Vision subsystem for detecting objects using DepthAI and tracking them,
     returning tracked object IDs with their X and Z coordinates, consistent with
     the original Vision subsystem.
     """
-    def __init__(self, configPath='best.json', model_name='best_openvino_2022.1_6shave.blob', output_depth=False):
+
+    def __init__(
+        self,
+        configPath="best.json",
+        model_name="best_openvino_2022.1_6shave.blob",
+        output_depth=False,
+    ):
         self.command = None
-        
+
         self.config_path = Path(configPath)
         self.model_name = model_name
         self.pipeline = None
@@ -131,7 +144,9 @@ class Vision(Subsystem):
             config = json.load(f)
         self.nn_config = config.get("nn_config", {})
         if "input_size" in self.nn_config:
-            self.W, self.H = tuple(map(int, self.nn_config.get("input_size").split('x')))
+            self.W, self.H = tuple(
+                map(int, self.nn_config.get("input_size").split("x"))
+            )
         self.metadata = self.nn_config.get("NN_specific_metadata", {})
         self.labels = config.get("mappings", {}).get("labels", {})
 
@@ -171,16 +186,24 @@ class Vision(Subsystem):
 
         stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
         stereo.setDepthAlign(dai.CameraBoardSocket.CAM_A)
-        stereo.setOutputSize(monoLeft.getResolutionWidth(), monoLeft.getResolutionHeight())
+        stereo.setOutputSize(
+            monoLeft.getResolutionWidth(), monoLeft.getResolutionHeight()
+        )
         stereo.setSubpixel(True)
 
         # Network specific settings
         nnPath = self.model_name
         if not Path(nnPath).exists():
             print(f"No blob found at {nnPath}. Looking into DepthAI model zoo.")
-            nnPath = str(blobconverter.from_zoo(self.model_name, shaves=6, zoo_type="depthai", use_cache=True))
+            nnPath = str(
+                blobconverter.from_zoo(
+                    self.model_name, shaves=6, zoo_type="depthai", use_cache=True
+                )
+            )
         detectionNetwork.setBlobPath(nnPath)
-        detectionNetwork.setConfidenceThreshold(self.metadata.get("confidence_threshold", 0.5))
+        detectionNetwork.setConfidenceThreshold(
+            self.metadata.get("confidence_threshold", 0.5)
+        )
         detectionNetwork.input.setBlocking(False)
         detectionNetwork.setBoundingBoxScaleFactor(0.5)
         detectionNetwork.setDepthLowerThreshold(100)
@@ -201,10 +224,16 @@ class Vision(Subsystem):
     def _start_device(self):
         try:
             self.device = dai.Device(self.pipeline)
-            self.preview_queue = self.device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
-            self.detection_nn_queue = self.device.getOutputQueue(name="detections", maxSize=4, blocking=False)
+            self.preview_queue = self.device.getOutputQueue(
+                name="rgb", maxSize=4, blocking=False
+            )
+            self.detection_nn_queue = self.device.getOutputQueue(
+                name="detections", maxSize=4, blocking=False
+            )
             if self.output_depth:
-                self.depth_queue = self.device.getOutputQueue(name="depth", maxSize=4, blocking=False)
+                self.depth_queue = self.device.getOutputQueue(
+                    name="depth", maxSize=4, blocking=False
+                )
             else:
                 self.depth_queue = None
         except Exception as e:
@@ -220,16 +249,16 @@ class Vision(Subsystem):
         in_preview = self.preview_queue.get()
         in_detections = self.detection_nn_queue.get()
         self.current_frame = in_preview.getCvFrame()
-        
+
         self.current_detections = []
 
         for detection in in_detections.detections:
             label = self.labels[detection.label]
-            if label == label_name:
+            confidence = detection.confidence
+            if label == label_name and confidence > 0.5:
                 self.current_detections.append(detection)
             else:
                 pass
-
 
         if self.output_depth and self.depth_queue is not None:
             in_depth = self.depth_queue.get()
@@ -238,7 +267,9 @@ class Vision(Subsystem):
             self.current_depth_frame = None
 
         self.frame_height, self.frame_width = self.current_frame.shape[:2]
-        tracked_objects = self.tracker.update(self.current_detections, self.frame_width, self.frame_height)
+        tracked_objects = self.tracker.update(
+            self.current_detections, self.frame_width, self.frame_height
+        )
 
         # Prepare the output dictionary with tracked IDs and their X, Z coords
         tracked_coords = {}
@@ -261,4 +292,3 @@ class Vision(Subsystem):
             self.device.close()
         cv2.destroyAllWindows()
         print("DepthAI pipeline stopped.")
-
